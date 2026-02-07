@@ -1,17 +1,43 @@
 
 import { WordExtractionResult } from "../types";
 
-// DeepSeek API Configuration
-// Vercel Environment Variable: DEEPSEEK_API_KEY
-const API_KEY = process.env.DEEPSEEK_API_KEY;
 const BASE_URL = "https://api.deepseek.com/chat/completions";
+
+// API Kalitni olish funksiyasi
+const getApiKey = (): string => {
+  // 1. Vite standarti (Tavsiya etiladi: Vercel da VITE_DEEPSEEK_API_KEY deb nomlang)
+  // @ts-ignore
+  if (import.meta.env && import.meta.env.VITE_DEEPSEEK_API_KEY) {
+    // @ts-ignore
+    return import.meta.env.VITE_DEEPSEEK_API_KEY;
+  }
+
+  // 2. Ehtiyot chorasi (Agar bundler process.env ni qo'llasa)
+  try {
+    if (typeof process !== 'undefined' && process.env) {
+      if (process.env.DEEPSEEK_API_KEY) return process.env.DEEPSEEK_API_KEY;
+      if (process.env.NEXT_PUBLIC_DEEPSEEK_API_KEY) return process.env.NEXT_PUBLIC_DEEPSEEK_API_KEY;
+    }
+  } catch (e) {
+    // ignore error
+  }
+
+  return "";
+};
+
+const API_KEY = getApiKey();
 
 /**
  * Helper function to call DeepSeek API (OpenAI Compatible)
  */
 async function callDeepSeek(messages: { role: string; content: string }[]): Promise<string> {
   if (!API_KEY) {
-    throw new Error("DEEPSEEK_API_KEY topilmadi. Iltimos, Vercel sozlamalarida kalitni to'g'ri kiriting.");
+    throw new Error(
+      "API Kalit topilmadi!\n\n" +
+      "1. Vercel loyiha sozlamalariga kiring.\n" +
+      "2. 'DEEPSEEK_API_KEY' nomini 'VITE_DEEPSEEK_API_KEY' ga o'zgartiring.\n" +
+      "3. Loyihani qayta deploy qiling (Redeploy)."
+    );
   }
 
   try {
@@ -24,7 +50,7 @@ async function callDeepSeek(messages: { role: string; content: string }[]): Prom
       body: JSON.stringify({
         model: "deepseek-chat",
         messages: messages,
-        response_format: { type: "json_object" }, // JSON formatni majburlash
+        response_format: { type: "json_object" },
         temperature: 1.0,
         stream: false
       })
@@ -48,21 +74,22 @@ async function callDeepSeek(messages: { role: string; content: string }[]): Prom
  * Generates Word, IPA, Translation, Definition, and Example.
  */
 export const extractWords = async (input: string): Promise<WordExtractionResult[]> => {
-  // DeepSeek JSON mode requires the word "json" in the prompt
   const systemPrompt = `You are a professional Flashcard Generation System.
-Input: A list of English words.
+Input: A list of English words (which may contain numbers, hyphens, or translations like "1. Ability - Qobiliyat").
 Output: A valid JSON Array.
 
-For each word, provide an object with these exact keys:
-1. "word" (The original word, capitalized)
-2. "ipa" (International Phonetic Alphabet pronunciation, e.g., /wɜːrd/)
-3. "translation" (Uzbek translation)
-4. "definition" (A simple, learner-friendly English definition, max 12 words)
-5. "example" (A short example sentence using the word)
+Task:
+1. Extract ONLY the English word from the input. Ignore numbers (1., 2.), symbols (-), and provided translations.
+2. Generate the following details for each extracted English word:
+   - "word" (Capitalized English word)
+   - "ipa" (IPA pronunciation, e.g., /wɜːrd/)
+   - "translation" (Correct Uzbek translation)
+   - "definition" (Simple English definition, max 12 words)
+   - "example" (Short example sentence)
 
-Ensure the output is strictly valid JSON array.`;
+Ensure the output is strictly a valid JSON array.`;
 
-  const userPrompt = `Analyze these words for a flashcard system: "${input}"`;
+  const userPrompt = `Analyze and extract English words from this list, then generate flashcards: "${input}"`;
 
   try {
     const jsonString = await callDeepSeek([
@@ -70,10 +97,8 @@ Ensure the output is strictly valid JSON array.`;
       { role: "user", content: userPrompt }
     ]);
 
-    // Parse the result
     const parsed = JSON.parse(jsonString);
     
-    // Handle different JSON structures DeepSeek might return
     if (Array.isArray(parsed)) {
       return parsed;
     } else if (parsed.words && Array.isArray(parsed.words)) {
@@ -81,7 +106,6 @@ Ensure the output is strictly valid JSON array.`;
     } else if (parsed.items && Array.isArray(parsed.items)) {
       return parsed.items;
     } else {
-      // Fallback: try to find any array in the object values
       const values = Object.values(parsed);
       for (const val of values) {
         if (Array.isArray(val)) return val as WordExtractionResult[];
@@ -91,7 +115,7 @@ Ensure the output is strictly valid JSON array.`;
 
   } catch (error) {
     console.error("DeepSeek Extraction Error:", error);
-    return [];
+    throw error; // Xatoni App.tsx ga uzatamiz
   }
 };
 
@@ -100,7 +124,7 @@ Ensure the output is strictly valid JSON array.`;
  */
 export const evaluateAnswer = async (
   word: string,
-  context: string, // definition or translation to check against
+  context: string,
   userAnswer: string,
   testType: 'TRANSLATION' | 'SENTENCE'
 ): Promise<{ correct: boolean; feedback: string }> => {

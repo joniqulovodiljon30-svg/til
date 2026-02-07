@@ -1,1 +1,0 @@
-to// Ushbu fayl proAiService.ts bilan almashtirildi va o'chirildi.

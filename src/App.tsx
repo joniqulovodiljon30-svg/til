@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { Flashcard, SupportedLanguage } from './types';
 import { extractWords } from './services/vocabService';
@@ -516,7 +515,7 @@ const Dashboard: React.FC = () => {
 // --- APP ROOT COMPONENT ---
 // Separated to ensure hooks are always called in the same order.
 const App: React.FC = () => {
-  const { isBlocked, loading: securityLoading } = useSecurity();
+  const { blocked } = useSecurity();
   const [currentPath] = useState(window.location.pathname);
 
   // If we are at /security, render handler (hooks inside SecurityHandler are consistent)
@@ -524,10 +523,8 @@ const App: React.FC = () => {
     return <SecurityHandler />;
   }
 
-  // Loading state (no hooks below this, so it's safe to return)
-  if (securityLoading) return null;
-
-  if (isBlocked) {
+  // If blocked, show 404
+  if (blocked) {
     return <Fake404 />;
   }
 

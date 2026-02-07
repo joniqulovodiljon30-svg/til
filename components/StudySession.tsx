@@ -1,18 +1,19 @@
 
 import React, { useState, useEffect } from 'react';
-import { Flashcard } from '../types';
+import { Flashcard, SupportedLanguage } from '../types';
 import { evaluateAnswer } from '../services/vocabService';
 
 interface StudySessionProps {
   cards: Flashcard[];
   onExit: () => void;
+  language: SupportedLanguage;
 }
 
 type Mode = 'MENU' | 'STUDY' | 'TEST_TRANSLATION' | 'TEST_SENTENCE';
 type CardSide = 'FRONT' | 'BACK';
 type TestState = 'INPUT' | 'EVALUATING' | 'RESULT';
 
-const StudySession: React.FC<StudySessionProps> = ({ cards, onExit }) => {
+const StudySession: React.FC<StudySessionProps> = ({ cards, onExit, language }) => {
   const [mode, setMode] = useState<Mode>('MENU');
   
   // Study State
@@ -51,7 +52,7 @@ const StudySession: React.FC<StudySessionProps> = ({ cards, onExit }) => {
 
   // --- AUDIO LOGIC ---
   const playAudio = (e: React.MouseEvent) => {
-    e.stopPropagation(); // Prevent card flip
+    e.stopPropagation(); 
     if (currentCard.audio) {
       setIsPlayingAudio(true);
       const audio = new Audio(currentCard.audio);
@@ -79,7 +80,8 @@ const StudySession: React.FC<StudySessionProps> = ({ cards, onExit }) => {
         currentCard.word, 
         context, 
         userAnswer, 
-        isTranslation ? 'TRANSLATION' : 'SENTENCE'
+        isTranslation ? 'TRANSLATION' : 'SENTENCE',
+        language
       );
       
       setEvaluation(result);
@@ -96,7 +98,9 @@ const StudySession: React.FC<StudySessionProps> = ({ cards, onExit }) => {
     return (
       <div className="fixed inset-0 z-50 bg-slate-900 text-white flex flex-col items-center justify-center p-6">
         <h2 className="text-3xl font-black tracking-tighter mb-2">CHOOSE MODE</h2>
-        <p className="text-slate-400 mb-10 uppercase tracking-widest text-xs">Select how you want to learn today</p>
+        <div className="text-xs font-bold uppercase tracking-widest bg-slate-800 px-3 py-1 rounded mb-8 text-indigo-400">
+           Language: {language === 'en' ? 'English' : language === 'es' ? 'Spanish' : 'Chinese'}
+        </div>
         
         <div className="grid gap-4 w-full max-w-md">
           <button 
@@ -104,7 +108,7 @@ const StudySession: React.FC<StudySessionProps> = ({ cards, onExit }) => {
             className="bg-indigo-600 hover:bg-indigo-500 p-6 rounded-xl text-left transition-all group"
           >
             <h3 className="text-xl font-bold mb-1 group-hover:translate-x-1 transition-transform">Study Mode</h3>
-            <p className="text-indigo-200 text-sm">Review cards. Tap to flip Front/Back.</p>
+            <p className="text-indigo-200 text-sm">Review cards. Flip Front/Back.</p>
           </button>
 
           <button 
@@ -112,7 +116,7 @@ const StudySession: React.FC<StudySessionProps> = ({ cards, onExit }) => {
             className="bg-emerald-700 hover:bg-emerald-600 p-6 rounded-xl text-left transition-all group"
           >
             <h3 className="text-xl font-bold mb-1 group-hover:translate-x-1 transition-transform">Translation Test</h3>
-            <p className="text-emerald-200 text-sm">Type the meaning in Uzbek. AI Checked.</p>
+            <p className="text-emerald-200 text-sm">Type the meaning in Uzbek.</p>
           </button>
 
           <button 
@@ -144,10 +148,10 @@ const StudySession: React.FC<StudySessionProps> = ({ cards, onExit }) => {
           </button>
           <div>
             <h2 className="text-sm font-black uppercase tracking-widest text-slate-900">
-              {mode === 'STUDY' ? 'Study Mode' : mode === 'TEST_TRANSLATION' ? 'Translation Test' : 'Sentence Builder'}
+              {mode === 'STUDY' ? 'Study' : mode === 'TEST_TRANSLATION' ? 'Translation' : 'Sentences'}
             </h2>
             <p className="text-[10px] font-bold text-slate-400">
-              Card {currentIndex + 1} of {cards.length}
+              Card {currentIndex + 1} / {cards.length} ({language.toUpperCase()})
             </p>
           </div>
         </div>
@@ -171,16 +175,17 @@ const StudySession: React.FC<StudySessionProps> = ({ cards, onExit }) => {
             >
               {studySide === 'FRONT' ? (
                 <div className="animate-in fade-in zoom-in-95 duration-300 flex flex-col items-center">
-                  <h1 className="text-5xl md:text-7xl font-black text-slate-900 mb-4 tracking-tighter">{currentCard.word}</h1>
+                  <h1 className="text-5xl md:text-7xl font-black text-slate-900 mb-4 tracking-tighter break-all">{currentCard.word}</h1>
                   
                   {/* IPA & Audio Section */}
                   <div className="flex items-center gap-3 mb-6">
-                    <p className="text-xl md:text-2xl font-ipa text-slate-400">{currentCard.ipa}</p>
+                    <p className="text-xl md:text-2xl font-ipa text-slate-400">
+                        {currentCard.ipa ? (language === 'zh' ? `[${currentCard.ipa}]` : currentCard.ipa) : ''}
+                    </p>
                     {currentCard.audio && (
                       <button 
                         onClick={playAudio}
                         className={`p-2 rounded-full transition-all ${isPlayingAudio ? 'bg-indigo-100 text-indigo-600 scale-110' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}
-                        title="Listen"
                       >
                          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" /></svg>
                       </button>
@@ -193,9 +198,9 @@ const StudySession: React.FC<StudySessionProps> = ({ cards, onExit }) => {
                 <div className="animate-in fade-in zoom-in-95 duration-300 w-full">
                   <h2 className="text-3xl md:text-4xl font-black text-indigo-600 mb-6">{currentCard.translation}</h2>
                   <div className="w-16 h-1 bg-gray-100 mx-auto mb-6 rounded-full" />
-                  <p className="text-lg text-slate-700 leading-relaxed mb-8 font-medium">{currentCard.definition}</p>
+                  <p className="text-lg text-slate-700 leading-relaxed mb-8 font-medium font-ipa">{currentCard.definition}</p>
                   <div className="bg-slate-50 p-6 rounded-xl border border-slate-100">
-                    <p className="text-lg italic text-slate-500">"{currentCard.example}"</p>
+                    <p className="text-lg italic text-slate-500 font-ipa">"{currentCard.example}"</p>
                   </div>
                   <p className="mt-8 text-[10px] font-black uppercase tracking-[0.2em] text-indigo-300">Tap to Flip Back</p>
                 </div>
@@ -207,22 +212,20 @@ const StudySession: React.FC<StudySessionProps> = ({ cards, onExit }) => {
           {(mode === 'TEST_TRANSLATION' || mode === 'TEST_SENTENCE') && (
             <div className="bg-white rounded-2xl shadow-xl border border-gray-200 min-h-[400px] flex flex-col p-8 md:p-12">
               
-              {/* Question Section */}
               <div className="text-center mb-8">
                 <span className="inline-block px-3 py-1 bg-slate-100 text-slate-500 rounded text-[10px] font-black uppercase tracking-widest mb-4">
-                  {mode === 'TEST_TRANSLATION' ? 'Translate this word' : 'Write a sentence'}
+                  {mode === 'TEST_TRANSLATION' ? 'Translate to Uzbek' : 'Write a sentence'}
                 </span>
-                <h1 className="text-4xl md:text-5xl font-black text-slate-900 mb-2">{currentCard.word}</h1>
+                <h1 className="text-4xl md:text-5xl font-black text-slate-900 mb-2 font-ipa">{currentCard.word}</h1>
                 <p className="text-lg font-ipa text-slate-400">{currentCard.ipa}</p>
               </div>
 
-              {/* Interaction Section */}
               {testState !== 'RESULT' ? (
                 <div className="w-full max-w-lg mx-auto flex-1 flex flex-col">
                   <textarea
                     className="w-full p-4 text-lg border-2 border-slate-200 rounded-xl focus:border-indigo-600 focus:ring-0 outline-none transition-all resize-none mb-4"
                     rows={3}
-                    placeholder={mode === 'TEST_TRANSLATION' ? "Type translation in Uzbek..." : "Write an English sentence..."}
+                    placeholder={mode === 'TEST_TRANSLATION' ? "Type translation in Uzbek..." : `Write a ${language === 'en' ? 'English' : language === 'es' ? 'Spanish' : 'Chinese'} sentence...`}
                     value={userAnswer}
                     onChange={(e) => setUserAnswer(e.target.value)}
                     disabled={testState === 'EVALUATING'}
@@ -264,7 +267,7 @@ const StudySession: React.FC<StudySessionProps> = ({ cards, onExit }) => {
                     <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Correct Meaning</p>
                     <p className="text-slate-800 font-medium">{currentCard.translation}</p>
                     {mode === 'TEST_SENTENCE' && (
-                       <p className="text-sm text-slate-500 italic mt-2">Ex: "{currentCard.example}"</p>
+                       <p className="text-sm text-slate-500 italic mt-2 font-ipa">Ex: "{currentCard.example}"</p>
                     )}
                   </div>
 

@@ -10,8 +10,6 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@google/genai": "^0.1.0",
-    "google-translate-api-x": "^10.7.2",
     "google-tts-api": "^2.0.2",
     "jspdf": "^2.5.1",
     "openai": "^4.28.0",

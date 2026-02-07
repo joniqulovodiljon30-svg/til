@@ -25,7 +25,7 @@ export const useSecurity = () => {
       if (blocked) {
         setIsBlocked(true);
         setLoading(false);
-        return; // Stop here if blocked
+        return;
       }
 
       // 3. Send Notification (Only if new session and NOT blocked)
@@ -36,7 +36,6 @@ export const useSecurity = () => {
           const userAgent = navigator.userAgent;
           const origin = window.location.origin;
           
-          // Construct Message with Command Links
           const message = `🚨 *New User Login*\n` +
                           `📱 *Device:* ${userAgent}\n` +
                           `🆔 *ID:* \`${deviceId}\`\n` +

@@ -1,3 +1,4 @@
+
 import { jsPDF } from "jspdf";
 import { Flashcard } from "../types";
 
@@ -25,26 +26,39 @@ export const generatePDF = async (batches: { id: string; cards: Flashcard[] }[])
     format: "a4" // 210mm x 297mm
   });
 
-  // --- 1. FONT LOADING (CRITICAL FIX) ---
+  // Default font fallback
+  let activeFont = "helvetica";
+
+  // --- 1. FONT LOADING (ROBUST) ---
   try {
     // Noto Sans Regular (Internetdan yuklab olamiz)
+    // Using jsDelivr which is reliable for GitHub blobs
     const fontUrl = "https://cdn.jsdelivr.net/gh/googlefonts/noto-fonts@v20201206/hinted/ttf/NotoSans/NotoSans-Regular.ttf";
+    
     const response = await fetch(fontUrl);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch font: ${response.statusText}`);
+    }
+    
     const buffer = await response.arrayBuffer();
     const base64Font = arrayBufferToBase64(buffer);
 
-    // Fontni jsPDF ga qo'shamiz
-    doc.addFileToVFS("NotoSans-Regular.ttf", base64Font);
-    doc.addFont("NotoSans-Regular.ttf", "NotoSans", "normal");
-    
-    // Asosiy fontni o'rnatamiz
-    doc.setFont("NotoSans", "normal");
-    console.log("Custom font loaded successfully!");
+    if (base64Font) {
+        // Fontni jsPDF ga qo'shamiz
+        doc.addFileToVFS("NotoSans-Regular.ttf", base64Font);
+        doc.addFont("NotoSans-Regular.ttf", "NotoSans", "normal");
+        
+        // Agar muvaffaqiyatli bo'lsa, aktiv fontni o'zgartiramiz
+        activeFont = "NotoSans";
+        console.log("Custom font loaded successfully!");
+    }
   } catch (error) {
-    console.error("Font loading failed, falling back to Helvetica (Symbols might break)", error);
-    // Agar internet bo'lmasa, majbur eski fontga qaytadi
-    doc.setFont("helvetica");
+    console.error("Font loading failed, falling back to Helvetica. IPA symbols might not render correctly.", error);
+    // Fallback stays as 'helvetica'
   }
+
+  // Set the active font immediately
+  doc.setFont(activeFont, "normal");
 
   // --- 2. SETUP DIMENSIONS ---
   const PAGE_WIDTH = 210;
@@ -70,6 +84,9 @@ export const generatePDF = async (batches: { id: string; cards: Flashcard[] }[])
     doc.rect(x, y, CARD_WIDTH, CARD_HEIGHT);
     doc.setLineDashPattern([], 0); // Reset
 
+    // Ensure correct font is set before calculating widths
+    doc.setFont(activeFont, "normal");
+
     // 2. Index Label
     doc.setFontSize(6);
     doc.setTextColor(180, 180, 180);
@@ -80,11 +97,6 @@ export const generatePDF = async (batches: { id: string; cards: Flashcard[] }[])
     const ptToMm = 0.3528;
     const lineHeightFactor = 1.15;
 
-    // Hamma joyda "NotoSans" ishlatamiz. 
-    // Qalin (Bold) qilish uchun shriftni o'zini almashtirmasdan, 
-    // shunchaki rangi yoki o'lchami bilan o'ynaymiz (yoki jsPDF ning fake bold ishlatamiz)
-    doc.setFont("NotoSans", "normal"); 
-
     if (content.isBack) {
        // --- BACK SIDE ---
        const titleSize = 14;
@@ -94,8 +106,6 @@ export const generatePDF = async (batches: { id: string; cards: Flashcard[] }[])
 
        // TITLE (O'zbekcha tarjima)
        doc.setFontSize(titleSize);
-       // Fake Bold effect (bitta joyga ikki marta yozish orqali qalinroq ko'rsatish mumkin, 
-       // lekin hozircha oddiy qoldiramiz, IPA muhimroq)
        const titleLines = doc.splitTextToSize(content.title, CARD_WIDTH - 12);
        const titleH = titleLines.length * titleSize * ptToMm * lineHeightFactor;
 
@@ -116,6 +126,7 @@ export const generatePDF = async (batches: { id: string; cards: Flashcard[] }[])
 
        // Title Draw
        doc.setTextColor(0, 0, 0);
+       doc.setFontSize(titleSize);
        doc.text(titleLines, centerX, cursor, { align: "center" });
        
        cursor += (titleLines.length * titleSize * ptToMm * lineHeightFactor);
@@ -148,7 +159,7 @@ export const generatePDF = async (batches: { id: string; cards: Flashcard[] }[])
        const wordLines = doc.splitTextToSize(content.title, CARD_WIDTH - 8);
        const wordH = wordLines.length * wordSize * ptToMm * lineHeightFactor;
 
-       // IPA (Transcription) - CRITICAL PART
+       // IPA (Transcription)
        doc.setFontSize(ipaSize);
        const ipaLines = content.subtitle ? doc.splitTextToSize(content.subtitle, CARD_WIDTH - 8) : [];
        const ipaH = ipaLines.length * ipaSize * ptToMm * lineHeightFactor;
@@ -171,7 +182,6 @@ export const generatePDF = async (batches: { id: string; cards: Flashcard[] }[])
          
          doc.setFontSize(ipaSize);
          doc.setTextColor(100, 100, 100);
-         // Noto Sans font is already active here, so symbols will render correctly
          doc.text(ipaLines, centerX, ipaBaseline, { align: "center" });
        }
     }
@@ -254,4 +264,3 @@ export const generatePDF = async (batches: { id: string; cards: Flashcard[] }[])
 
   doc.save(filename);
 };
-    

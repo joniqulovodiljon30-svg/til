@@ -117,28 +117,9 @@ Focus on speed and JSON validity.`;
 /**
  * 3. HYBRID ORCHESTRATOR (Parallel Execution)
  * Runs Task B (Dictionary) and Task C (AI) simultaneously.
+ * Updated to accept string[] directly.
  */
-export const extractWords = async (input: string): Promise<WordExtractionResult[]> => {
-  // A. Clean and Normalize Input
-  const rawLines = input.split('\n');
-  const uniqueWords = new Set<string>();
-  
-  rawLines.forEach(line => {
-    // Remove numbers "1.", "1)"
-    const cleanLine = line.replace(/^\d+[\.\)]\s*/, '').trim();
-    if (!cleanLine) return;
-    
-    // Split by common delimiters
-    const parts = cleanLine.split(/[\-–—,]/); 
-    const firstPart = parts[0].trim();
-    
-    // Basic validation
-    if (firstPart && /[a-zA-Z]/.test(firstPart)) {
-      uniqueWords.add(firstPart);
-    }
-  });
-
-  const wordList = Array.from(uniqueWords);
+export const extractWords = async (wordList: string[]): Promise<WordExtractionResult[]> => {
   if (wordList.length === 0) return [];
 
   console.log("Starting Hybrid Extraction for:", wordList);
@@ -160,6 +141,9 @@ export const extractWords = async (input: string): Promise<WordExtractionResult[
     dictResults.forEach(d => dictMap.set(d.word.toLowerCase(), d));
 
     // Combine
+    // We iterate over the ORIGINAL word list to ensure we don't lose words if AI skips one
+    // or we iterate over AI results if we trust AI to return all. 
+    // Usually AI results are the master for translation content.
     const finalCards: WordExtractionResult[] = aiResults.map((aiItem) => {
       const dictItem = dictMap.get(aiItem.word.toLowerCase());
       

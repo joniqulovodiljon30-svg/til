@@ -1,42 +1,58 @@
 
-import { WordExtractionResult } from "../types";
+import OpenAI from "openai";
+import { pinyin } from "pinyin-pro";
+import { getAudioUrl } from "google-tts-api";
+import { WordExtractionResult, SupportedLanguage } from "../types";
 
 // --- CONFIGURATION ---
 const DEEPSEEK_API_KEY = "sk-ec020064fbb7426cb15bffb16902d982";
-const BASE_URL = "https://api.deepseek.com/chat/completions";
 
-/**
- * TYPE DEFINITIONS
- */
+// Initialize OpenAI SDK for DeepSeek
+const deepseek = new OpenAI({
+  baseURL: "https://api.deepseek.com",
+  apiKey: DEEPSEEK_API_KEY,
+  dangerouslyAllowBrowser: true // Required for client-side usage
+});
+
+// --- HELPER: AUDIO GENERATOR ---
+function generateAudioLink(word: string, lang: SupportedLanguage): string {
+  try {
+    // google-tts-api maps: 'en'->'en', 'es'->'es', 'zh'->'zh-CN'
+    const ttsLang = lang === 'zh' ? 'zh-CN' : lang;
+    return getAudioUrl(word, {
+      lang: ttsLang,
+      slow: false,
+      host: 'https://translate.google.com',
+    });
+  } catch (e) {
+    console.warn("TTS Generation failed:", e);
+    return "";
+  }
+}
+
+// --- 1. DICTIONARY API (ENGLISH ONLY) ---
 interface DictionaryResult {
-  word: string;
   ipa: string;
   audio?: string;
   found: boolean;
 }
 
-/**
- * 1. DICTIONARY API FETCHER (Task B)
- * Fetches Phonetics and Audio specifically.
- */
-async function fetchDictionaryData(word: string): Promise<DictionaryResult> {
+async function fetchEnglishDictionaryData(word: string): Promise<DictionaryResult> {
   try {
     const res = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word)}`);
-    if (!res.ok) {
-      return { word, ipa: "", found: false };
-    }
+    if (!res.ok) return { ipa: "", found: false };
     
     const data = await res.json();
     const entry = data[0];
 
-    // Logic to find the best IPA
+    // IPA
     let ipa = entry.phonetic || "";
     if (!ipa && entry.phonetics?.length > 0) {
       const p = entry.phonetics.find((p: any) => p.text);
       if (p) ipa = p.text;
     }
 
-    // Logic to find the best Audio (Prefer US English)
+    // Audio
     let audio = "";
     if (entry.phonetics?.length > 0) {
       const audioEntry = entry.phonetics.find((p: any) => p.audio && p.audio.includes('-us.mp3')) 
@@ -44,163 +60,154 @@ async function fetchDictionaryData(word: string): Promise<DictionaryResult> {
       if (audioEntry) audio = audioEntry.audio;
     }
 
-    return { word, ipa, audio, found: true };
+    return { ipa, audio, found: true };
   } catch (e) {
-    return { word, ipa: "", found: false };
+    return { ipa: "", found: false };
   }
 }
 
-/**
- * 2. DEEPSEEK API CALLER (Task C)
- * Generates Translation, Definition, and Example.
- */
-async function generateContextData(words: string[]): Promise<WordExtractionResult[]> {
-  const systemPrompt = `You are a High-Performance Vocabulary Engine.
-Output strictly valid JSON Array.
-
-For each word, provide:
-- "word": Capitalized English word.
-- "translation": Accurate Uzbek translation (Context: General/Academic).
-- "definition": Simple English definition (A2/B1 level, max 12 words).
-- "example": One clear example sentence in English.
-- "fallback_ipa": An estimated IPA transcription (used only if dictionary fails).
-
-Focus on speed and JSON validity.`;
-
-  const userPrompt = `Process these words: ${JSON.stringify(words)}`;
-
-  try {
-    const response = await fetch(BASE_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${DEEPSEEK_API_KEY}`
-      },
-      body: JSON.stringify({
-        model: "deepseek-chat",
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt }
-        ],
-        response_format: { type: "json_object" },
-        temperature: 1.1,
-        max_tokens: 2048,
-        stream: false
-      })
-    });
-
-    if (!response.ok) {
-      const err = await response.text();
-      throw new Error(`AI Error: ${err}`);
-    }
-
-    const data = await response.json();
-    const content = data.choices?.[0]?.message?.content || "";
-    const parsed = JSON.parse(content);
-
-    let results: any[] = [];
-    if (Array.isArray(parsed)) results = parsed;
-    else if (parsed.words) results = parsed.words;
-    else if (parsed.items) results = parsed.items;
-    else results = Object.values(parsed).find(v => Array.isArray(v)) as any[] || [];
-
-    return results as WordExtractionResult[];
-
-  } catch (error) {
-    console.error("DeepSeek Failed:", error);
-    throw error;
-  }
-}
-
-/**
- * 3. HYBRID ORCHESTRATOR
- * Runs Dictionary and AI tasks simultaneously.
- */
-export const extractWords = async (wordList: string[]): Promise<WordExtractionResult[]> => {
+// --- 2. MAIN LOGIC ---
+export const extractWords = async (wordList: string[], lang: SupportedLanguage): Promise<WordExtractionResult[]> => {
   if (wordList.length === 0) return [];
+  console.log(`Processing ${wordList.length} words in ${lang}...`);
 
-  console.log("Starting Hybrid Extraction for:", wordList);
+  // A. PREPARE PROMPTS FOR DEEPSEEK
+  let systemPrompt = "";
+  
+  if (lang === 'en') {
+    systemPrompt = `You are a Vocabulary Engine. Output valid JSON Array.
+    For each English word:
+    - "word": Capitalized English word.
+    - "translation": Accurate Uzbek translation.
+    - "definition": Simple English definition (A2 level).
+    - "example": One clear example sentence.`;
+  } else if (lang === 'es') {
+    systemPrompt = `You are a Vocabulary Engine. Output valid JSON Array.
+    For each Spanish word:
+    - "word": The word in Spanish.
+    - "translation": Accurate Uzbek translation.
+    - "definition": Definition in Spanish (A2 level).
+    - "example": Example sentence in Spanish.`;
+  } else if (lang === 'zh') {
+    systemPrompt = `You are a Vocabulary Engine. Output valid JSON Array.
+    For each Chinese word (Hanzi):
+    - "word": The Hanzi characters.
+    - "translation": Accurate Uzbek translation.
+    - "definition": Definition in Simplified Chinese (HSK level).
+    - "example": Example sentence in Simplified Chinese.`;
+  }
+
+  const userPrompt = `Words: ${JSON.stringify(wordList)}`;
 
   try {
-    const dictionaryTask = Promise.all(wordList.map(w => fetchDictionaryData(w)));
-    const aiTask = generateContextData(wordList);
-
-    const [dictResults, aiResults] = await Promise.all([dictionaryTask, aiTask]);
-
-    const dictMap = new Map<string, DictionaryResult>();
-    dictResults.forEach(d => dictMap.set(d.word.toLowerCase(), d));
-
-    const finalCards: WordExtractionResult[] = aiResults.map((aiItem) => {
-      const dictItem = dictMap.get(aiItem.word.toLowerCase());
-      const finalIpa = (dictItem?.found && dictItem.ipa) ? dictItem.ipa : (aiItem as any).fallback_ipa || "";
-      
-      return {
-        word: aiItem.word,
-        ipa: finalIpa,
-        audio: dictItem?.audio,
-        translation: aiItem.translation,
-        definition: aiItem.definition,
-        example: aiItem.example
-      };
+    // B. CALL DEEPSEEK (Parallel with Dictionary/TTS if possible, but we wait for context first)
+    const completion = await deepseek.chat.completions.create({
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt }
+      ],
+      model: "deepseek-chat",
+      response_format: { type: "json_object" },
+      temperature: 1.1
     });
 
-    return finalCards;
+    const content = completion.choices[0].message.content || "{}";
+    const parsed = JSON.parse(content);
+    
+    // Normalize response to array
+    let aiResults: any[] = [];
+    if (Array.isArray(parsed)) aiResults = parsed;
+    else if (parsed.words) aiResults = parsed.words;
+    else if (parsed.items) aiResults = parsed.items;
+    else aiResults = Object.values(parsed).find(v => Array.isArray(v)) as any[] || [];
+
+    // C. ENRICH DATA (Audio & IPA)
+    const finalResults: WordExtractionResult[] = await Promise.all(aiResults.map(async (item) => {
+      let finalIpa = "";
+      let finalAudio = "";
+
+      // --- ENGLISH STRATEGY ---
+      if (lang === 'en') {
+        const dictData = await fetchEnglishDictionaryData(item.word);
+        if (dictData.found) {
+          finalIpa = dictData.ipa;
+          finalAudio = dictData.audio || generateAudioLink(item.word, 'en');
+        } else {
+          // Fallback if dict fails
+          finalAudio = generateAudioLink(item.word, 'en');
+          // We assume DeepSeek didn't provide IPA here to save tokens, 
+          // but we could ask for it. For now, leave empty or handle in PDF.
+        }
+      } 
+      
+      // --- SPANISH STRATEGY ---
+      else if (lang === 'es') {
+        // DeepSeek doesn't reliably return standard IPA unless forced.
+        // We will generate audio via Google TTS.
+        finalAudio = generateAudioLink(item.word, 'es');
+        // Ideally, we'd ask DeepSeek for IPA, but to keep it simple we rely on user reading skills or add a second call. 
+        // For this version, we will leave IPA empty or assume the user can read Spanish phonetics (consistent).
+      } 
+      
+      // --- CHINESE STRATEGY ---
+      else if (lang === 'zh') {
+        // Pinyin Generation
+        try {
+          finalIpa = pinyin(item.word, { toneType: 'mark' });
+        } catch (e) {
+          finalIpa = "";
+        }
+        // Google TTS Audio
+        finalAudio = generateAudioLink(item.word, 'zh');
+      }
+
+      return {
+        word: item.word,
+        ipa: finalIpa,
+        audio: finalAudio,
+        translation: item.translation,
+        definition: item.definition,
+        example: item.example
+      };
+    }));
+
+    return finalResults;
 
   } catch (error) {
-    console.error("Hybrid Flow Failed:", error);
+    console.error("DeepSeek/Extraction Error:", error);
     throw error;
   }
 };
 
 /**
- * EVALUATE ANSWER (UPDATED FOR SENTENCE BUILDER)
+ * EVALUATE ANSWER
  */
 export const evaluateAnswer = async (
   word: string,
   context: string,
   userAnswer: string,
-  testType: 'TRANSLATION' | 'SENTENCE'
+  testType: 'TRANSLATION' | 'SENTENCE',
+  lang: SupportedLanguage
 ): Promise<{ correct: boolean; feedback: string }> => {
-  if (!userAnswer.trim()) return { correct: false, feedback: "Javob kiritilmadi." };
+  const langName = lang === 'en' ? 'English' : lang === 'es' ? 'Spanish' : 'Chinese';
+  
+  const systemPrompt = testType === 'SENTENCE' 
+    ? `You are a ${langName} Teacher. Check if the user used "${word}" correctly in a ${langName} sentence. JSON Output: { "correct": boolean, "feedback": "Explanation in Uzbek" }`
+    : `You are a ${langName} Tutor. Check translation of "${word}" (${langName}) to Uzbek. Context: ${context}. JSON Output: { "correct": boolean, "feedback": "Explanation in Uzbek" }`;
 
-  let systemPrompt = "";
-  let userPrompt = "";
-
-  if (testType === 'SENTENCE') {
-    // Logic for Sentence Builder: Grammar Check
-    systemPrompt = `You are an English Grammar Teacher. 
-    The user must write a sentence using the target word.
-    Analyze the user's sentence for:
-    1. Correct usage of the target word.
-    2. Grammar and syntax accuracy.
-    
-    Output strictly valid JSON: { "correct": boolean, "feedback": "Brief explanation of grammar errors or praise in Uzbek." }`;
-    
-    userPrompt = `Target Word: "${word}"\nUser Sentence: "${userAnswer}"`;
-  } else {
-    // Logic for Translation Test
-    systemPrompt = `You are an English tutor. Output strictly valid JSON: { "correct": boolean, "feedback": "Uzbek explanation" }`;
-    userPrompt = `Task: Translate "${word}" to Uzbek.\nContext/Definition: ${context}\nUser Answer: ${userAnswer}`;
-  }
+  const userPrompt = `User Answer: "${userAnswer}"`;
 
   try {
-    const res = await fetch(BASE_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${DEEPSEEK_API_KEY}` },
-      body: JSON.stringify({
-        model: "deepseek-chat",
-        messages: [{ role: "system", content: systemPrompt }, { role: "user", content: userPrompt }],
-        response_format: { type: "json_object" }
-      })
+    const completion = await deepseek.chat.completions.create({
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt }
+      ],
+      model: "deepseek-chat",
+      response_format: { type: "json_object" }
     });
-    
-    if (!res.ok) throw new Error("AI API Error");
-    
-    const data = await res.json();
-    const content = data.choices[0].message.content;
-    return JSON.parse(content);
+    return JSON.parse(completion.choices[0].message.content || "{}");
   } catch (e) {
-    console.error(e);
-    return { correct: false, feedback: "AI bilan aloqa xatosi. Qaytadan urinib ko'ring." };
+    return { correct: false, feedback: "AI Connection Error." };
   }
 };

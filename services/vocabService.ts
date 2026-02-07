@@ -51,11 +51,10 @@ async function fetchDictionaryData(word: string): Promise<DictionaryResult> {
 }
 
 /**
- * 2. DEEPSEEK API CALLER (Task C + Task A Simulation)
- * Generates Translation, Definition, and Example in one optimized call.
+ * 2. DEEPSEEK API CALLER (Task C)
+ * Generates Translation, Definition, and Example.
  */
 async function generateContextData(words: string[]): Promise<WordExtractionResult[]> {
-  // We ask for IPA as a fallback_ipa in case Dictionary API fails
   const systemPrompt = `You are a High-Performance Vocabulary Engine.
 Output strictly valid JSON Array.
 
@@ -84,7 +83,7 @@ Focus on speed and JSON validity.`;
           { role: "user", content: userPrompt }
         ],
         response_format: { type: "json_object" },
-        temperature: 1.1, // Slightly creative for examples
+        temperature: 1.1,
         max_tokens: 2048,
         stream: false
       })
@@ -99,7 +98,6 @@ Focus on speed and JSON validity.`;
     const content = data.choices?.[0]?.message?.content || "";
     const parsed = JSON.parse(content);
 
-    // Robust parsing to handle various JSON structures
     let results: any[] = [];
     if (Array.isArray(parsed)) results = parsed;
     else if (parsed.words) results = parsed.words;
@@ -115,9 +113,8 @@ Focus on speed and JSON validity.`;
 }
 
 /**
- * 3. HYBRID ORCHESTRATOR (Parallel Execution)
- * Runs Task B (Dictionary) and Task C (AI) simultaneously.
- * Updated to accept string[] directly.
+ * 3. HYBRID ORCHESTRATOR
+ * Runs Dictionary and AI tasks simultaneously.
  */
 export const extractWords = async (wordList: string[]): Promise<WordExtractionResult[]> => {
   if (wordList.length === 0) return [];
@@ -125,35 +122,22 @@ export const extractWords = async (wordList: string[]): Promise<WordExtractionRe
   console.log("Starting Hybrid Extraction for:", wordList);
 
   try {
-    // B. START PARALLEL TASKS
-    // Task 1: Fetch Dictionary Data for ALL words (Array of Promises)
     const dictionaryTask = Promise.all(wordList.map(w => fetchDictionaryData(w)));
-    
-    // Task 2: Fetch Context Data from AI (Single Batch Request)
     const aiTask = generateContextData(wordList);
 
-    // C. AWAIT BOTH (This is the speed optimization)
     const [dictResults, aiResults] = await Promise.all([dictionaryTask, aiTask]);
 
-    // D. MERGE DATA
-    // Create a map for fast lookup of dictionary data
     const dictMap = new Map<string, DictionaryResult>();
     dictResults.forEach(d => dictMap.set(d.word.toLowerCase(), d));
 
-    // Combine
-    // We iterate over the ORIGINAL word list to ensure we don't lose words if AI skips one
-    // or we iterate over AI results if we trust AI to return all. 
-    // Usually AI results are the master for translation content.
     const finalCards: WordExtractionResult[] = aiResults.map((aiItem) => {
       const dictItem = dictMap.get(aiItem.word.toLowerCase());
-      
-      // Use Dictionary IPA if available, otherwise AI fallback
       const finalIpa = (dictItem?.found && dictItem.ipa) ? dictItem.ipa : (aiItem as any).fallback_ipa || "";
       
       return {
         word: aiItem.word,
         ipa: finalIpa,
-        audio: dictItem?.audio, // Only from dictionary
+        audio: dictItem?.audio,
         translation: aiItem.translation,
         definition: aiItem.definition,
         example: aiItem.example
@@ -169,7 +153,7 @@ export const extractWords = async (wordList: string[]): Promise<WordExtractionRe
 };
 
 /**
- * EVALUATION SERVICE (Legacy / Unchanged)
+ * EVALUATE ANSWER (UPDATED FOR SENTENCE BUILDER)
  */
 export const evaluateAnswer = async (
   word: string,
@@ -179,8 +163,25 @@ export const evaluateAnswer = async (
 ): Promise<{ correct: boolean; feedback: string }> => {
   if (!userAnswer.trim()) return { correct: false, feedback: "Javob kiritilmadi." };
 
-  const systemPrompt = `You are an English tutor. Output JSON: { "correct": boolean, "feedback": "Uzbek explanation" }`;
-  const userPrompt = `Task: ${testType}\nWord: ${word}\nContext: ${context}\nUser Answer: ${userAnswer}`;
+  let systemPrompt = "";
+  let userPrompt = "";
+
+  if (testType === 'SENTENCE') {
+    // Logic for Sentence Builder: Grammar Check
+    systemPrompt = `You are an English Grammar Teacher. 
+    The user must write a sentence using the target word.
+    Analyze the user's sentence for:
+    1. Correct usage of the target word.
+    2. Grammar and syntax accuracy.
+    
+    Output strictly valid JSON: { "correct": boolean, "feedback": "Brief explanation of grammar errors or praise in Uzbek." }`;
+    
+    userPrompt = `Target Word: "${word}"\nUser Sentence: "${userAnswer}"`;
+  } else {
+    // Logic for Translation Test
+    systemPrompt = `You are an English tutor. Output strictly valid JSON: { "correct": boolean, "feedback": "Uzbek explanation" }`;
+    userPrompt = `Task: Translate "${word}" to Uzbek.\nContext/Definition: ${context}\nUser Answer: ${userAnswer}`;
+  }
 
   try {
     const res = await fetch(BASE_URL, {
@@ -192,9 +193,14 @@ export const evaluateAnswer = async (
         response_format: { type: "json_object" }
       })
     });
+    
+    if (!res.ok) throw new Error("AI API Error");
+    
     const data = await res.json();
-    return JSON.parse(data.choices[0].message.content);
+    const content = data.choices[0].message.content;
+    return JSON.parse(content);
   } catch (e) {
-    return { correct: false, feedback: "AI xatosi." };
+    console.error(e);
+    return { correct: false, feedback: "AI bilan aloqa xatosi. Qaytadan urinib ko'ring." };
   }
 };

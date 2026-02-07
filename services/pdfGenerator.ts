@@ -31,13 +31,15 @@ export const generatePDF = async (batches: { id: string; cards: Flashcard[] }[])
 
   // --- 1. FONT LOADING (ROBUST) ---
   try {
-    // Noto Sans Regular (Internetdan yuklab olamiz)
-    // Using jsDelivr which is reliable for GitHub blobs
-    const fontUrl = "https://cdn.jsdelivr.net/gh/googlefonts/noto-fonts@v20201206/hinted/ttf/NotoSans/NotoSans-Regular.ttf";
+    // Noto Sans Regular (Source: Google Fonts GitHub via jsDelivr)
+    // We use the 'main' branch to ensure the path is correct as the structure changed in older tags
+    const fontUrl = "https://cdn.jsdelivr.net/gh/googlefonts/noto-fonts@main/hinted/ttf/NotoSans/NotoSans-Regular.ttf";
     
+    console.log("Attempting to fetch font from:", fontUrl);
     const response = await fetch(fontUrl);
+    
     if (!response.ok) {
-      throw new Error(`Failed to fetch font: ${response.statusText}`);
+      throw new Error(`Failed to fetch font: ${response.status} ${response.statusText}`);
     }
     
     const buffer = await response.arrayBuffer();

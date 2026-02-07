@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
-import { Flashcard } from './types';
+
+import React, { useState, useEffect, useMemo } from 'react';
+import { Flashcard, SupportedLanguage } from './types';
 import { extractWords } from './services/vocabService';
 import { generatePDF } from './services/pdfGenerator';
 import StudySession from './components/StudySession';
@@ -24,6 +25,7 @@ const App: React.FC = () => {
 
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [targetLanguage, setTargetLanguage] = useState<SupportedLanguage>('en'); // Default English
   
   // Selection for Printing
   const [selectedBatchIds, setSelectedBatchIds] = useState<Set<string>>(new Set());
@@ -57,7 +59,7 @@ const App: React.FC = () => {
   }, [notification]);
 
   // Group cards by Batch ID
-  const batches = React.useMemo(() => {
+  const batches = useMemo(() => {
     const groups: Record<string, Flashcard[]> = {};
     flashcards.forEach(card => {
       if (!groups[card.batchId]) groups[card.batchId] = [];
@@ -66,6 +68,14 @@ const App: React.FC = () => {
     // Sort keys (dates) descending
     return Object.entries(groups).sort((a, b) => b[0].localeCompare(a[0]));
   }, [flashcards]);
+
+  // Filter batches by CURRENT selected language
+  const filteredBatches = useMemo(() => {
+    return batches.filter(([_, cards]) => {
+       // Assume batch belongs to the language of its first card
+       return cards.length > 0 && cards[0].language === targetLanguage;
+    });
+  }, [batches, targetLanguage]);
 
   const toggleBatchSelection = (batchId: string) => {
     const newSet = new Set(selectedBatchIds);
@@ -101,25 +111,29 @@ const App: React.FC = () => {
 
   const generateTestData = () => {
     const timestamp = new Date();
-    const batchId = `Demo List ${timestamp.getFullYear()}-${String(timestamp.getMonth() + 1).padStart(2, '0')}-${String(timestamp.getDate()).padStart(2, '0')}`;
+    const dateStr = `${timestamp.getFullYear()}-${String(timestamp.getMonth() + 1).padStart(2, '0')}-${String(timestamp.getDate()).padStart(2, '0')}`;
     
-    const testWords = [
-      { w: "Serendipity", i: "/ˌsɛrənˈdɪpɪti/", t: "Baxtli tasodif", d: "The occurrence of events by chance in a happy or beneficial way.", e: "Meeting my old friend was pure serendipity." },
-      { w: "Ability", i: "/əˈbɪləti/", t: "Qobiliyat", d: "Possession of the means or skill to do something.", e: "He has the ability to learn quickly." }
+    // Create separate batches for each language so they appear in correct tabs
+    const testSets = [
+      { w: "Serendipity", i: "/ˌsɛrənˈdɪpɪti/", t: "Baxtli tasodif", d: "The occurrence of events by chance in a happy or beneficial way.", e: "Meeting my old friend was pure serendipity.", l: 'en' as SupportedLanguage },
+      { w: "Gato", i: "/ˈgato/", t: "Mushuk", d: "Mamífero felino doméstico.", e: "El gato duerme en el sofá.", l: 'es' as SupportedLanguage },
+      { w: "你好", i: "nǐ hǎo", t: "Salom", d: "Hello; How are you?", e: "你好，很高兴见到你。", l: 'zh' as SupportedLanguage }
     ];
 
-    const newCards: Flashcard[] = testWords.map((item, idx) => ({
-      id: `test-${batchId}-${idx}`,
+    const newCards: Flashcard[] = testSets.map((item, idx) => ({
+      id: `test-${item.l}-${Date.now()}-${idx}`,
       word: item.w,
       ipa: item.i,
       translation: item.t,
       definition: item.d,
       example: item.e,
-      batchId: batchId,
+      batchId: `Demo (${item.l.toUpperCase()}) ${dateStr}`,
+      language: item.l,
       createdAt: Date.now() + idx
     }));
 
     setFlashcards(prev => [...newCards, ...prev]);
+    setNotification({ message: "Demo ma'lumotlar qo'shildi!", type: 'success' });
   };
 
   const handleGenerate = async () => {
@@ -130,31 +144,16 @@ const App: React.FC = () => {
     }
 
     // --- ROBUST PARSING LOGIC ---
-    // 1. Split by newline OR comma to handle different paste formats
-    // 2. Map through items to clean them up
-    // 3. Filter valid words
-    
     const cleanWords = rawInput
-      .split(/[\n,]/) // Split by newline or comma
-      .map(line => {
-        // Remove leading numbering (e.g., "1.", "2)", "•", "-") and trim
-        // Matches digits followed by . or ) at start, or bullet points
-        return line.replace(/^[\d\.\)\-\*\•\>]+/, '').trim();
-      })
-      .filter(w => {
-        // Keep if it has at least one letter and length > 1
-        // Also remove purely symbolic strings
-        return w.length > 1 && /[a-zA-Z]/.test(w);
-      });
+      .split(/[\n,]/) 
+      .map(line => line.replace(/^[\d\.\)\-\*\•\>]+/, '').trim())
+      .filter(w => w.length > 0); // Allow single chars for Chinese
     
-    // Remove "Word - Translation" parts if they pasted a definition list
-    // We only want the first word before " - " or " – "
     const extractedWords = cleanWords.map(w => {
        const parts = w.split(/[\-–—]/);
        return parts[0].trim();
     });
 
-    // Final clean of duplicates within the input
     const finalWordsToProcess: string[] = Array.from(new Set(extractedWords));
 
     if (finalWordsToProcess.length === 0) {
@@ -164,21 +163,18 @@ const App: React.FC = () => {
 
     setIsLoading(true);
     
-    // --- DAILY BATCHING LOGIC ---
-    // Generate a single ID for today. All additions today go here.
     const today = new Date();
-    const batchId = `Daily List ${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    const batchId = `List (${targetLanguage.toUpperCase()}) ${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
 
     try {
-      // Process in chunks of 10 to respect API limits
       const chunkSize = 10;
       let allNewCards: Flashcard[] = [];
 
       for (let i = 0; i < finalWordsToProcess.length; i += chunkSize) {
         const chunk = finalWordsToProcess.slice(i, i + chunkSize);
         
-        // Pass array directly to service
-        const results = await extractWords(chunk);
+        // Pass LANGUAGE to service
+        const results = await extractWords(chunk, targetLanguage);
         
         const chunkCards: Flashcard[] = results.map(res => ({
           id: Math.random().toString(36).substring(2, 11),
@@ -188,15 +184,14 @@ const App: React.FC = () => {
           translation: res.translation,
           definition: res.definition,
           example: res.example,
-          batchId: batchId, // Unified Batch ID
+          batchId: batchId, 
+          language: targetLanguage, // Store language
           createdAt: Date.now()
         }));
 
         allNewCards = [...allNewCards, ...chunkCards];
       }
 
-      // Check for duplicates against EXISTING cards to prevent re-adding same word
-      // We only filter if the word already exists in the app to avoid clutter
       setFlashcards(prev => {
         const existingWords = new Set(prev.map(c => c.word.toLowerCase()));
         const uniqueNewCards = allNewCards.filter(c => !existingWords.has(c.word.toLowerCase()));
@@ -244,6 +239,8 @@ const App: React.FC = () => {
 
   // Prepare Active Study Batch
   const activeStudyCards = studyBatchId ? batches.find(b => b[0] === studyBatchId)?.[1] || [] : [];
+  // Get language of study batch (assume batch is mono-lingual, or take first card)
+  const studyBatchLang = activeStudyCards.length > 0 ? activeStudyCards[0].language : 'en';
 
   return (
     <div className="min-h-screen bg-gray-50 font-sans text-slate-900 relative">
@@ -257,17 +254,12 @@ const App: React.FC = () => {
           notification.type === 'success' ? 'bg-emerald-500 text-white' : 'bg-red-500 text-white'
         }`}>
           <div className="flex items-center gap-2">
-            {notification.type === 'success' ? (
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
-            ) : (
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-            )}
             <span className="font-bold text-sm">{notification.message}</span>
           </div>
         </div>
       )}
 
-      {/* 1. LOADING OVERLAY (Blur Effect) */}
+      {/* LOADING OVERLAY */}
       {isLoading && (
         <div className="fixed inset-0 z-[70] bg-white/50 backdrop-blur-md flex flex-col items-center justify-center animate-in fade-in duration-500">
           <div className="relative">
@@ -277,89 +269,78 @@ const App: React.FC = () => {
             </div>
           </div>
           <p className="mt-4 text-slate-900 font-black text-lg tracking-widest uppercase animate-pulse">
-            Tahlil qilinmoqda...
+            Tahlil qilinmoqda ({targetLanguage.toUpperCase()})...
           </p>
-          <p className="text-slate-500 text-sm mt-2">So'zlar yuklanmoqda ({input.split('\n').length} ta)</p>
         </div>
       )}
 
-      {/* 2. STUDY MODE OVERLAY */}
+      {/* STUDY MODE OVERLAY */}
       {studyBatchId && (
         <div className="fixed inset-0 z-50 bg-white">
           <StudySession 
             cards={activeStudyCards} 
             onExit={() => setStudyBatchId(null)} 
+            language={studyBatchLang}
           />
         </div>
       )}
 
-      {/* 3. DELETE CONFIRMATION MODAL */}
+      {/* DELETE MODAL */}
       {batchToDelete && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6 transform scale-100 animate-in zoom-in-95 duration-200">
-             {/* Delete Modal Content */}
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6">
              <div className="flex flex-col items-center text-center">
-              <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mb-4 text-red-600">
-                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                </svg>
-              </div>
               <h3 className="text-lg font-black text-slate-900 mb-2">O'chirishni tasdiqlang</h3>
               <p className="text-slate-500 text-sm mb-6">
                 To'plam: <strong>{batchToDelete}</strong><br/>
                 O'chirib yuborilsinmi?
               </p>
               <div className="flex gap-3 w-full">
-                <button 
-                  onClick={() => setBatchToDelete(null)}
-                  className="flex-1 py-3 bg-gray-100 hover:bg-gray-200 text-slate-700 font-bold rounded-xl transition-colors text-xs uppercase tracking-wider"
-                >
-                  Yo'q
-                </button>
-                <button 
-                  onClick={confirmDeleteBatch}
-                  className="flex-1 py-3 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl transition-colors text-xs uppercase tracking-wider shadow-lg shadow-red-200"
-                >
-                  Ha
-                </button>
+                <button onClick={() => setBatchToDelete(null)} className="flex-1 py-3 bg-gray-100 font-bold rounded-xl text-xs uppercase">Yo'q</button>
+                <button onClick={confirmDeleteBatch} className="flex-1 py-3 bg-red-600 text-white font-bold rounded-xl text-xs uppercase">Ha</button>
               </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* 4. MAIN DASHBOARD */}
+      {/* MAIN DASHBOARD */}
       <div className={`transition-all duration-300 ${isBannerVisible ? 'pt-16' : ''}`}>
         {/* Header */}
         <header className="bg-slate-900 text-white py-6 px-4">
-          <div className="max-w-4xl mx-auto flex justify-between items-start">
-            <div>
+          <div className="max-w-4xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
+            <div className="text-center md:text-left">
               <h1 className="text-xl font-black tracking-tighter">FLASH-XB7</h1>
-              <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-slate-400 mt-1">Daily Vocabulary System</p>
+              <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-slate-400 mt-1">Multi-Lingual Vocabulary</p>
             </div>
             
-            {/* Right Side: Author & Demo */}
-            <div className="flex flex-col items-end gap-2">
-              <a 
-                href="https://t.me/Mr_Odilxon" 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="bg-white text-slate-900 px-4 py-1.5 rounded-full flex items-center gap-2 hover:bg-slate-100 transition-all active:scale-95 shadow-lg shadow-white/10 group"
+            {/* LANGUAGE SWITCHER */}
+            <div className="bg-slate-800 p-1 rounded-lg flex gap-1">
+              <button 
+                onClick={() => setTargetLanguage('en')}
+                className={`px-3 py-1.5 rounded-md text-[10px] font-bold uppercase transition-all ${targetLanguage === 'en' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}
               >
-                <svg className="w-4 h-4 text-slate-900 group-hover:text-blue-500 transition-colors" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 15h-2v-6h2v6zm-1-7c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm5 7h-2v-6h2v6z"/></svg>
-                <span className="text-[10px] font-black uppercase tracking-wider">Loyiha muallifi</span>
-              </a>
+                🇬🇧 ENG
+              </button>
+              <button 
+                onClick={() => setTargetLanguage('es')}
+                className={`px-3 py-1.5 rounded-md text-[10px] font-bold uppercase transition-all ${targetLanguage === 'es' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}
+              >
+                🇪🇸 ESP
+              </button>
+              <button 
+                onClick={() => setTargetLanguage('zh')}
+                className={`px-3 py-1.5 rounded-md text-[10px] font-bold uppercase transition-all ${targetLanguage === 'zh' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}
+              >
+                🇨🇳 CHN
+              </button>
+            </div>
 
-              <div className="flex gap-2">
-                <button onClick={generateTestData} className="text-[9px] bg-slate-800 hover:bg-slate-700 text-emerald-400 font-bold uppercase tracking-widest px-3 py-1.5 rounded transition-colors">
-                  + Demo
-                </button>
-                {flashcards.length > 0 && (
-                  <button onClick={clearAll} className="text-[9px] bg-slate-800 hover:bg-slate-700 text-red-400 font-bold uppercase tracking-widest px-3 py-1.5 rounded transition-colors">
-                    Reset
-                  </button>
-                )}
-              </div>
+            <div className="flex gap-2">
+              <button onClick={generateTestData} className="text-[9px] bg-slate-800 text-emerald-400 font-bold uppercase px-3 py-1.5 rounded">+ Demo</button>
+              {flashcards.length > 0 && (
+                <button onClick={clearAll} className="text-[9px] bg-slate-800 text-red-400 font-bold uppercase px-3 py-1.5 rounded">Reset</button>
+              )}
             </div>
           </div>
         </header>
@@ -367,14 +348,21 @@ const App: React.FC = () => {
         <main className="max-w-4xl mx-auto w-full px-4 py-8 pb-32">
           
           {/* Input Section */}
-          <section className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm mb-10">
+          <section className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm mb-10 relative overflow-hidden">
+             {/* Background Flag Hint */}
+             <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none">
+                <span className="text-9xl font-black text-slate-900">
+                  {targetLanguage === 'en' ? 'EN' : targetLanguage === 'es' ? 'ES' : 'ZH'}
+                </span>
+             </div>
+
              <label className="block text-[10px] font-black text-slate-400 uppercase mb-3 tracking-[0.15em]">
-               Yangi so'zlar qo'shish (Matn, Ro'yxat yoki Vergul bilan)
+               Add Words ({targetLanguage === 'en' ? 'English' : targetLanguage === 'es' ? 'Spanish' : 'Chinese/Hanzi'})
              </label>
-             <div className="flex gap-4 items-start">
+             <div className="flex gap-4 items-start z-10 relative">
                <textarea
                  className="flex-1 p-4 border border-slate-200 rounded-lg focus:ring-1 focus:ring-slate-900 outline-none h-32 text-sm placeholder:text-slate-300 font-medium resize-none"
-                 placeholder={`Example:\nSerendipity\nEloquent\nResilient\n(Just paste your list here)`}
+                 placeholder={targetLanguage === 'zh' ? "你好\n世界\n..." : "Paste your list here..."}
                  value={input}
                  onChange={(e) => setInput(e.target.value)}
                  disabled={isLoading}
@@ -389,86 +377,93 @@ const App: React.FC = () => {
                  }`}
                >
                  {isLoading ? (
-                   <>
-                    <div className="w-5 h-5 border-2 border-slate-300 border-t-slate-500 rounded-full animate-spin"></div>
-                    <span>...</span>
-                   </>
+                   <span>...</span>
                  ) : (
                    <>
-                    <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
                     <span>Add</span>
+                    <span className="text-[8px] opacity-70">{targetLanguage.toUpperCase()}</span>
                    </>
                  )}
                </button>
              </div>
           </section>
 
-          {/* Batches Grid */}
+          {/* Batches Grid with Filtered View */}
           <section>
             <div className="flex justify-between items-end mb-6">
               <h2 className="text-sm font-black text-slate-900 uppercase tracking-widest">
-                Sizning To'plamlaringiz
+                Collections ({targetLanguage.toUpperCase()})
               </h2>
               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                {batches.length} Collections
+                {filteredBatches.length} Sets
               </span>
             </div>
 
-            {batches.length === 0 ? (
-              <div className="text-center py-20 border-2 border-dashed border-slate-200 rounded-xl">
-                <p className="text-slate-400 font-medium text-sm">Hozircha hech narsa yo'q. Yuqorida so'z qo'shing!</p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {batches.map(([id, cards]) => (
-                  <div 
-                    key={id}
-                    className={`relative bg-white border rounded-xl p-5 transition-all hover:border-indigo-200 hover:shadow-md ${
-                      selectedBatchIds.has(id) ? 'border-indigo-500 ring-1 ring-indigo-500 bg-indigo-50/10' : 'border-slate-200'
-                    }`}
-                  >
-                    {/* Header: Date & Count */}
-                    <div className="flex justify-between items-start mb-6">
-                      <div>
-                        <h3 className="font-bold text-slate-900 text-sm">{id}</h3>
-                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">
-                          {cards.length} Cards
-                        </p>
-                      </div>
-                      <button 
-                        onClick={(e) => requestDeleteBatch(e, id)}
-                        className="text-slate-400 hover:text-red-600 transition-colors p-2 hover:bg-red-50 rounded-full group"
-                        title="O'chirish"
-                      >
-                        <svg className="w-5 h-5 group-hover:scale-110 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-                      </button>
-                    </div>
-
-                    {/* Actions */}
-                    <div className="flex gap-3 items-center">
-                      <button
-                        onClick={() => setStudyBatchId(id)}
-                        className="flex-1 bg-slate-900 text-white py-3 rounded-lg font-black text-[10px] uppercase tracking-[0.2em] hover:bg-slate-800 transition-all shadow-lg shadow-slate-200 active:scale-95"
-                      >
-                        Start Study
-                      </button>
-                      
-                      <div 
-                        className="flex items-center justify-center w-12 h-full cursor-pointer group"
-                        onClick={() => toggleBatchSelection(id)}
-                        title="Select for PDF Print"
-                      >
-                        <input 
-                          type="checkbox"
-                          checked={selectedBatchIds.has(id)}
-                          onChange={() => toggleBatchSelection(id)}
-                          className="w-5 h-5 accent-indigo-600 cursor-pointer group-hover:ring-2 ring-indigo-200 rounded"
-                        />
-                      </div>
-                    </div>
+            {filteredBatches.length === 0 ? (
+               // EMPTY STATE PLACEHOLDER
+               <div className="border-2 border-dashed border-slate-200 rounded-3xl p-12 flex flex-col items-center justify-center text-center h-64 animate-in fade-in duration-500">
+                  <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mb-4 text-slate-300">
+                    <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" /></svg>
                   </div>
-                ))}
-              </div>
+                  <p className="text-slate-400 font-bold text-sm">Hozircha hech narsa yo'q. Yuqorida so'z qo'shing!</p>
+               </div>
+            ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {filteredBatches.map(([id, cards]) => {
+                     // Detect language from first card
+                     const batchLang = cards[0]?.language || 'en';
+                     const langFlag = batchLang === 'en' ? '🇬🇧' : batchLang === 'es' ? '🇪🇸' : '🇨🇳';
+
+                     return (
+                      <div 
+                        key={id}
+                        className={`relative bg-white border rounded-xl p-5 transition-all hover:border-indigo-200 hover:shadow-md animate-in fade-in zoom-in-95 duration-300 ${
+                          selectedBatchIds.has(id) ? 'border-indigo-500 ring-1 ring-indigo-500 bg-indigo-50/10' : 'border-slate-200'
+                        }`}
+                      >
+                        <div className="flex justify-between items-start mb-6">
+                          <div>
+                            <div className="flex items-center gap-2">
+                               <span className="text-lg">{langFlag}</span>
+                               <h3 className="font-bold text-slate-900 text-sm truncate max-w-[150px]">{id}</h3>
+                            </div>
+                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1 ml-7">
+                              {cards.length} Cards
+                            </p>
+                          </div>
+                          <button 
+                            onClick={(e) => requestDeleteBatch(e, id)}
+                            className="text-slate-400 hover:text-red-600 transition-colors p-2 hover:bg-red-50 rounded-full"
+                          >
+                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                          </button>
+                        </div>
+
+                        <div className="flex gap-3 items-center">
+                          <button
+                            onClick={() => setStudyBatchId(id)}
+                            className="flex-1 bg-slate-900 text-white py-3 rounded-lg font-black text-[10px] uppercase tracking-[0.2em] hover:bg-slate-800 transition-all shadow-lg active:scale-95"
+                          >
+                            Study
+                          </button>
+                          
+                          <div 
+                            className="flex items-center justify-center w-12 h-full cursor-pointer group"
+                            onClick={() => toggleBatchSelection(id)}
+                            title="Select for PDF Print"
+                          >
+                            <input 
+                              type="checkbox"
+                              checked={selectedBatchIds.has(id)}
+                              onChange={() => toggleBatchSelection(id)}
+                              className="w-5 h-5 accent-indigo-600 cursor-pointer"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
             )}
           </section>
 

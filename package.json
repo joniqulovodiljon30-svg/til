@@ -10,7 +10,6 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "google-tts-api": "^2.0.2",
     "jspdf": "^2.5.1",
     "openai": "^4.28.0",
     "pinyin-pro": "^3.19.6",

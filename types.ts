@@ -5,7 +5,7 @@ export interface Flashcard {
   id: string;
   word: string;
   ipa: string;
-  audio?: string; // URL from google-tts-api or Dictionary API
+  audio?: string; // Optional URL (Dictionary API for EN). If empty, Frontend uses Web Speech API.
   translation: string;
   definition: string;
   example: string;

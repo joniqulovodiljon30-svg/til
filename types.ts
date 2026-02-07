@@ -1,37 +1,25 @@
 
-export enum GameMode {
-  TRANSLATION = 'TRANSLATION',
-  SENTENCE_BUILDING = 'SENTENCE_BUILDING'
-}
-
-export interface WordStats {
-  timesAsked: number;
-  correctCount: number;
-  lastResult: 'correct' | 'incorrect' | null;
-}
-
-export interface Word {
+export interface Flashcard {
   id: string;
-  english: string;
-  uzbek: string;
-  type: string;
-  createdAt: number;
-  stats: WordStats;
-}
-
-export interface Feedback {
   word: string;
-  sentence?: string;
-  translation?: string;
-  part_of_speech?: string;
-  correct: boolean;
-  explanation: string;
-  correct_sentence?: string;
-  saved?: boolean;
+  ipa: string;
+  translation: string;
+  definition: string;
+  example: string;
+  batchId: string; // To group by 12 (e.g., "2023-10-27-Batch-1")
+  createdAt: number;
 }
 
 export interface WordExtractionResult {
   word: string;
+  ipa: string;
   translation: string;
-  type: string;
+  definition: string;
+  example: string;
+}
+
+// Deprecated/Legacy types kept minimal if needed, or removed if unused
+export interface Feedback {
+  correct: boolean;
+  explanation: string;
 }

@@ -1,24 +1,55 @@
-
 import { jsPDF } from "jspdf";
 import { Flashcard } from "../types";
 
+// Yordamchi funksiya: Fontni jsPDF tushunadigan formatga o'tkazish
+function arrayBufferToBase64(buffer: ArrayBuffer) {
+  let binary = '';
+  const bytes = new Uint8Array(buffer);
+  const len = bytes.byteLength;
+  for (let i = 0; i < len; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return window.btoa(binary);
+}
+
 /**
- * Generates a production-grade, marginless A4 PDF.
+ * Generates a production-grade, marginless A4 PDF with Custom Font support.
  * Layout: 3x4 grid (12 cards per page).
- * Supports UNLIMITED pages (chunks of 12).
+ * Supports UNLIMITED pages.
+ * NOW SUPPORTS: IPA Phonetics via Noto Sans.
  */
-export const generatePDF = (batches: { id: string; cards: Flashcard[] }[]) => {
+export const generatePDF = async (batches: { id: string; cards: Flashcard[] }[]) => {
   const doc = new jsPDF({
     orientation: "portrait",
     unit: "mm",
     format: "a4" // 210mm x 297mm
   });
 
-  // A4 Dimensions (Exact)
+  // --- 1. FONT LOADING (CRITICAL FIX) ---
+  try {
+    // Noto Sans Regular (Internetdan yuklab olamiz)
+    const fontUrl = "https://cdn.jsdelivr.net/gh/googlefonts/noto-fonts@v20201206/hinted/ttf/NotoSans/NotoSans-Regular.ttf";
+    const response = await fetch(fontUrl);
+    const buffer = await response.arrayBuffer();
+    const base64Font = arrayBufferToBase64(buffer);
+
+    // Fontni jsPDF ga qo'shamiz
+    doc.addFileToVFS("NotoSans-Regular.ttf", base64Font);
+    doc.addFont("NotoSans-Regular.ttf", "NotoSans", "normal");
+    
+    // Asosiy fontni o'rnatamiz
+    doc.setFont("NotoSans", "normal");
+    console.log("Custom font loaded successfully!");
+  } catch (error) {
+    console.error("Font loading failed, falling back to Helvetica (Symbols might break)", error);
+    // Agar internet bo'lmasa, majbur eski fontga qaytadi
+    doc.setFont("helvetica");
+  }
+
+  // --- 2. SETUP DIMENSIONS ---
   const PAGE_WIDTH = 210;
   const PAGE_HEIGHT = 297;
   
-  // Grid Dimensions (3 cols, 4 rows)
   const COLS = 3;
   const ROWS = 4;
   const CARDS_PER_PAGE = COLS * ROWS; // 12
@@ -40,7 +71,6 @@ export const generatePDF = (batches: { id: string; cards: Flashcard[] }[]) => {
     doc.setLineDashPattern([], 0); // Reset
 
     // 2. Index Label
-    doc.setFont("helvetica", "normal");
     doc.setFontSize(6);
     doc.setTextColor(180, 180, 180);
     doc.text(indexLabel, x + 3, y + 4);
@@ -50,6 +80,11 @@ export const generatePDF = (batches: { id: string; cards: Flashcard[] }[]) => {
     const ptToMm = 0.3528;
     const lineHeightFactor = 1.15;
 
+    // Hamma joyda "NotoSans" ishlatamiz. 
+    // Qalin (Bold) qilish uchun shriftni o'zini almashtirmasdan, 
+    // shunchaki rangi yoki o'lchami bilan o'ynaymiz (yoki jsPDF ning fake bold ishlatamiz)
+    doc.setFont("NotoSans", "normal"); 
+
     if (content.isBack) {
        // --- BACK SIDE ---
        const titleSize = 14;
@@ -57,17 +92,19 @@ export const generatePDF = (batches: { id: string; cards: Flashcard[] }[]) => {
        const footerSize = 8;
        const gap = 4;
 
-       doc.setFont("helvetica", "bold");
+       // TITLE (O'zbekcha tarjima)
        doc.setFontSize(titleSize);
+       // Fake Bold effect (bitta joyga ikki marta yozish orqali qalinroq ko'rsatish mumkin, 
+       // lekin hozircha oddiy qoldiramiz, IPA muhimroq)
        const titleLines = doc.splitTextToSize(content.title, CARD_WIDTH - 12);
        const titleH = titleLines.length * titleSize * ptToMm * lineHeightFactor;
 
-       doc.setFont("helvetica", "normal");
+       // BODY (Definition)
        doc.setFontSize(bodySize);
        const bodyLines = content.body ? doc.splitTextToSize(content.body, CARD_WIDTH - 12) : [];
        const bodyH = bodyLines.length * bodySize * ptToMm * lineHeightFactor;
 
-       doc.setFont("helvetica", "italic");
+       // FOOTER (Example)
        doc.setFontSize(footerSize);
        const footerLines = content.footer ? doc.splitTextToSize(`"${content.footer}"`, CARD_WIDTH - 12) : [];
        const footerH = footerLines.length * footerSize * ptToMm * lineHeightFactor;
@@ -77,25 +114,24 @@ export const generatePDF = (batches: { id: string; cards: Flashcard[] }[]) => {
        
        let cursor = boxTopY + (titleSize * ptToMm); 
 
-       doc.setFont("helvetica", "bold");
-       doc.setFontSize(titleSize);
+       // Title Draw
        doc.setTextColor(0, 0, 0);
        doc.text(titleLines, centerX, cursor, { align: "center" });
        
        cursor += (titleLines.length * titleSize * ptToMm * lineHeightFactor);
 
+       // Body Draw
        if (bodyLines.length > 0) {
          cursor += gap;
-         doc.setFont("helvetica", "normal");
          doc.setFontSize(bodySize);
          doc.setTextColor(50, 50, 50);
          doc.text(bodyLines, centerX, cursor, { align: "center" });
          cursor += (bodyLines.length * bodySize * ptToMm * lineHeightFactor);
        }
 
+       // Footer Draw
        if (footerLines.length > 0) {
          cursor += gap;
-         doc.setFont("helvetica", "italic");
          doc.setFontSize(footerSize);
          doc.setTextColor(100, 100, 100);
          doc.text(footerLines, centerX, cursor, { align: "center" });
@@ -107,12 +143,12 @@ export const generatePDF = (batches: { id: string; cards: Flashcard[] }[]) => {
        const ipaSize = 10;
        const gap = 3;
 
-       doc.setFont("helvetica", "bold");
+       // WORD (English)
        doc.setFontSize(wordSize);
        const wordLines = doc.splitTextToSize(content.title, CARD_WIDTH - 8);
        const wordH = wordLines.length * wordSize * ptToMm * lineHeightFactor;
 
-       doc.setFont("helvetica", "italic");
+       // IPA (Transcription) - CRITICAL PART
        doc.setFontSize(ipaSize);
        const ipaLines = content.subtitle ? doc.splitTextToSize(content.subtitle, CARD_WIDTH - 8) : [];
        const ipaH = ipaLines.length * ipaSize * ptToMm * lineHeightFactor;
@@ -122,25 +158,26 @@ export const generatePDF = (batches: { id: string; cards: Flashcard[] }[]) => {
        
        let cursor = boxTopY + (wordSize * ptToMm); 
 
-       doc.setFont("helvetica", "bold");
+       // Word Draw
        doc.setFontSize(wordSize);
        doc.setTextColor(0, 0, 0);
        doc.text(wordLines, centerX, cursor, { align: "center" });
        
+       // IPA Draw
        if (ipaLines.length > 0) {
          const wordBottom = boxTopY + wordH;
          const ipaTop = wordBottom + gap;
          const ipaBaseline = ipaTop + (ipaSize * ptToMm);
          
-         doc.setFont("helvetica", "italic");
          doc.setFontSize(ipaSize);
          doc.setTextColor(100, 100, 100);
+         // Noto Sans font is already active here, so symbols will render correctly
          doc.text(ipaLines, centerX, ipaBaseline, { align: "center" });
        }
     }
   };
 
-  // --- MAIN GENERATION LOOP (UNLIMITED PAGES) ---
+  // --- MAIN GENERATION LOOP ---
   
   let isFirstPage = true;
 
@@ -149,7 +186,7 @@ export const generatePDF = (batches: { id: string; cards: Flashcard[] }[]) => {
 
     // Process in chunks of 12
     for (let i = 0; i < allCards.length; i += CARDS_PER_PAGE) {
-      // 1. Prepare Chunk (Pad with empty cards if needed for back-mirroring)
+      // 1. Prepare Chunk
       const chunkRaw = allCards.slice(i, i + CARDS_PER_PAGE);
       const chunk = [...chunkRaw];
       while (chunk.length < CARDS_PER_PAGE) {
@@ -159,15 +196,13 @@ export const generatePDF = (batches: { id: string; cards: Flashcard[] }[]) => {
         });
       }
 
-      // Current Chunk Info for Labels
       const chunkIdx = Math.floor(i / CARDS_PER_PAGE);
       
       // 2. PAGE N (FRONT)
-      // Only add new page if it's NOT the very first page of the document
       if (!isFirstPage) {
         doc.addPage();
       }
-      isFirstPage = false; // Next iteration will always add page
+      isFirstPage = false; 
 
       chunk.forEach((card, idx) => {
         const col = idx % COLS;
@@ -186,12 +221,10 @@ export const generatePDF = (batches: { id: string; cards: Flashcard[] }[]) => {
       });
 
       // 3. PAGE N+1 (BACK)
-      doc.addPage(); // Always add a new page for the back side
+      doc.addPage(); 
 
       chunk.forEach((card, idx) => {
-        // Mirror Logic for Duplex Printing
-        // Front: 1 2 3
-        // Back:  3 2 1
+        // Mirror Logic
         const col = idx % COLS;
         const row = Math.floor(idx / COLS);
         const mirroredCol = (COLS - 1) - col; 
@@ -221,3 +254,4 @@ export const generatePDF = (batches: { id: string; cards: Flashcard[] }[]) => {
 
   doc.save(filename);
 };
+    

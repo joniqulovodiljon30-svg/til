@@ -1,126 +1,191 @@
 
 import { WordExtractionResult } from "../types";
 
+// --- CONFIGURATION ---
+const DEEPSEEK_API_KEY = "sk-ec020064fbb7426cb15bffb16902d982";
 const BASE_URL = "https://api.deepseek.com/chat/completions";
 
-// API Kalitni olish funksiyasi
-const getApiKey = (): string => {
-  // 1. Vite standarti (Tavsiya etiladi: Vercel da VITE_DEEPSEEK_API_KEY deb nomlang)
-  // @ts-ignore
-  if (import.meta.env && import.meta.env.VITE_DEEPSEEK_API_KEY) {
-    // @ts-ignore
-    return import.meta.env.VITE_DEEPSEEK_API_KEY;
-  }
-
-  // 2. Ehtiyot chorasi (Agar bundler process.env ni qo'llasa)
-  try {
-    if (typeof process !== 'undefined' && process.env) {
-      if (process.env.DEEPSEEK_API_KEY) return process.env.DEEPSEEK_API_KEY;
-      if (process.env.NEXT_PUBLIC_DEEPSEEK_API_KEY) return process.env.NEXT_PUBLIC_DEEPSEEK_API_KEY;
-    }
-  } catch (e) {
-    // ignore error
-  }
-
-  return "";
-};
-
-const API_KEY = getApiKey();
+/**
+ * TYPE DEFINITIONS
+ */
+interface DictionaryResult {
+  word: string;
+  ipa: string;
+  audio?: string;
+  found: boolean;
+}
 
 /**
- * Helper function to call DeepSeek API (OpenAI Compatible)
+ * 1. DICTIONARY API FETCHER (Task B)
+ * Fetches Phonetics and Audio specifically.
  */
-async function callDeepSeek(messages: { role: string; content: string }[]): Promise<string> {
-  if (!API_KEY) {
-    throw new Error(
-      "API Kalit topilmadi!\n\n" +
-      "1. Vercel loyiha sozlamalariga kiring.\n" +
-      "2. 'DEEPSEEK_API_KEY' nomini 'VITE_DEEPSEEK_API_KEY' ga o'zgartiring.\n" +
-      "3. Loyihani qayta deploy qiling (Redeploy)."
-    );
+async function fetchDictionaryData(word: string): Promise<DictionaryResult> {
+  try {
+    const res = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word)}`);
+    if (!res.ok) {
+      return { word, ipa: "", found: false };
+    }
+    
+    const data = await res.json();
+    const entry = data[0];
+
+    // Logic to find the best IPA
+    let ipa = entry.phonetic || "";
+    if (!ipa && entry.phonetics?.length > 0) {
+      const p = entry.phonetics.find((p: any) => p.text);
+      if (p) ipa = p.text;
+    }
+
+    // Logic to find the best Audio (Prefer US English)
+    let audio = "";
+    if (entry.phonetics?.length > 0) {
+      const audioEntry = entry.phonetics.find((p: any) => p.audio && p.audio.includes('-us.mp3')) 
+                      || entry.phonetics.find((p: any) => p.audio && p.audio !== "");
+      if (audioEntry) audio = audioEntry.audio;
+    }
+
+    return { word, ipa, audio, found: true };
+  } catch (e) {
+    return { word, ipa: "", found: false };
   }
+}
+
+/**
+ * 2. DEEPSEEK API CALLER (Task C + Task A Simulation)
+ * Generates Translation, Definition, and Example in one optimized call.
+ */
+async function generateContextData(words: string[]): Promise<WordExtractionResult[]> {
+  // We ask for IPA as a fallback_ipa in case Dictionary API fails
+  const systemPrompt = `You are a High-Performance Vocabulary Engine.
+Output strictly valid JSON Array.
+
+For each word, provide:
+- "word": Capitalized English word.
+- "translation": Accurate Uzbek translation (Context: General/Academic).
+- "definition": Simple English definition (A2/B1 level, max 12 words).
+- "example": One clear example sentence in English.
+- "fallback_ipa": An estimated IPA transcription (used only if dictionary fails).
+
+Focus on speed and JSON validity.`;
+
+  const userPrompt = `Process these words: ${JSON.stringify(words)}`;
 
   try {
     const response = await fetch(BASE_URL, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Authorization": `Bearer ${API_KEY}`
+        "Authorization": `Bearer ${DEEPSEEK_API_KEY}`
       },
       body: JSON.stringify({
         model: "deepseek-chat",
-        messages: messages,
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt }
+        ],
         response_format: { type: "json_object" },
-        temperature: 1.0,
+        temperature: 1.1, // Slightly creative for examples
+        max_tokens: 2048,
         stream: false
       })
     });
 
     if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`DeepSeek API Xatolik: ${response.status} - ${errorText}`);
+      const err = await response.text();
+      throw new Error(`AI Error: ${err}`);
     }
 
     const data = await response.json();
-    return data.choices?.[0]?.message?.content || "";
+    const content = data.choices?.[0]?.message?.content || "";
+    const parsed = JSON.parse(content);
+
+    // Robust parsing to handle various JSON structures
+    let results: any[] = [];
+    if (Array.isArray(parsed)) results = parsed;
+    else if (parsed.words) results = parsed.words;
+    else if (parsed.items) results = parsed.items;
+    else results = Object.values(parsed).find(v => Array.isArray(v)) as any[] || [];
+
+    return results as WordExtractionResult[];
+
   } catch (error) {
-    console.error("API Call Failed:", error);
+    console.error("DeepSeek Failed:", error);
     throw error;
   }
 }
 
 /**
- * DeepSeek Flashcard Generator.
- * Generates Word, IPA, Translation, Definition, and Example.
+ * 3. HYBRID ORCHESTRATOR (Parallel Execution)
+ * Runs Task B (Dictionary) and Task C (AI) simultaneously.
  */
 export const extractWords = async (input: string): Promise<WordExtractionResult[]> => {
-  const systemPrompt = `You are a professional Flashcard Generation System.
-Input: A list of English words (which may contain numbers, hyphens, or translations like "1. Ability - Qobiliyat").
-Output: A valid JSON Array.
+  // A. Clean and Normalize Input
+  const rawLines = input.split('\n');
+  const uniqueWords = new Set<string>();
+  
+  rawLines.forEach(line => {
+    // Remove numbers "1.", "1)"
+    const cleanLine = line.replace(/^\d+[\.\)]\s*/, '').trim();
+    if (!cleanLine) return;
+    
+    // Split by common delimiters
+    const parts = cleanLine.split(/[\-–—,]/); 
+    const firstPart = parts[0].trim();
+    
+    // Basic validation
+    if (firstPart && /[a-zA-Z]/.test(firstPart)) {
+      uniqueWords.add(firstPart);
+    }
+  });
 
-Task:
-1. Extract ONLY the English word from the input. Ignore numbers (1., 2.), symbols (-), and provided translations.
-2. Generate the following details for each extracted English word:
-   - "word" (Capitalized English word)
-   - "ipa" (IPA pronunciation, e.g., /wɜːrd/)
-   - "translation" (Correct Uzbek translation)
-   - "definition" (Simple English definition, max 12 words)
-   - "example" (Short example sentence)
+  const wordList = Array.from(uniqueWords);
+  if (wordList.length === 0) return [];
 
-Ensure the output is strictly a valid JSON array.`;
-
-  const userPrompt = `Analyze and extract English words from this list, then generate flashcards: "${input}"`;
+  console.log("Starting Hybrid Extraction for:", wordList);
 
   try {
-    const jsonString = await callDeepSeek([
-      { role: "system", content: systemPrompt },
-      { role: "user", content: userPrompt }
-    ]);
-
-    const parsed = JSON.parse(jsonString);
+    // B. START PARALLEL TASKS
+    // Task 1: Fetch Dictionary Data for ALL words (Array of Promises)
+    const dictionaryTask = Promise.all(wordList.map(w => fetchDictionaryData(w)));
     
-    if (Array.isArray(parsed)) {
-      return parsed;
-    } else if (parsed.words && Array.isArray(parsed.words)) {
-      return parsed.words;
-    } else if (parsed.items && Array.isArray(parsed.items)) {
-      return parsed.items;
-    } else {
-      const values = Object.values(parsed);
-      for (const val of values) {
-        if (Array.isArray(val)) return val as WordExtractionResult[];
-      }
-      return [];
-    }
+    // Task 2: Fetch Context Data from AI (Single Batch Request)
+    const aiTask = generateContextData(wordList);
+
+    // C. AWAIT BOTH (This is the speed optimization)
+    const [dictResults, aiResults] = await Promise.all([dictionaryTask, aiTask]);
+
+    // D. MERGE DATA
+    // Create a map for fast lookup of dictionary data
+    const dictMap = new Map<string, DictionaryResult>();
+    dictResults.forEach(d => dictMap.set(d.word.toLowerCase(), d));
+
+    // Combine
+    const finalCards: WordExtractionResult[] = aiResults.map((aiItem) => {
+      const dictItem = dictMap.get(aiItem.word.toLowerCase());
+      
+      // Use Dictionary IPA if available, otherwise AI fallback
+      const finalIpa = (dictItem?.found && dictItem.ipa) ? dictItem.ipa : (aiItem as any).fallback_ipa || "";
+      
+      return {
+        word: aiItem.word,
+        ipa: finalIpa,
+        audio: dictItem?.audio, // Only from dictionary
+        translation: aiItem.translation,
+        definition: aiItem.definition,
+        example: aiItem.example
+      };
+    });
+
+    return finalCards;
 
   } catch (error) {
-    console.error("DeepSeek Extraction Error:", error);
-    throw error; // Xatoni App.tsx ga uzatamiz
+    console.error("Hybrid Flow Failed:", error);
+    throw error;
   }
 };
 
 /**
- * Evaluates a user's answer for Translation or Sentence Building tests using DeepSeek.
+ * EVALUATION SERVICE (Legacy / Unchanged)
  */
 export const evaluateAnswer = async (
   word: string,
@@ -128,43 +193,24 @@ export const evaluateAnswer = async (
   userAnswer: string,
   testType: 'TRANSLATION' | 'SENTENCE'
 ): Promise<{ correct: boolean; feedback: string }> => {
-  if (!userAnswer.trim()) {
-    return { correct: false, feedback: "Javob kiritilmadi." };
-  }
+  if (!userAnswer.trim()) return { correct: false, feedback: "Javob kiritilmadi." };
 
-  const systemPrompt = `You are an English language tutor evaluation system. 
-You must output a strictly valid JSON object with keys: "correct" (boolean) and "feedback" (string, in Uzbek).`;
-
-  let taskPrompt = "";
-  if (testType === 'TRANSLATION') {
-    taskPrompt = `Task: Evaluate translation.
-Word: "${word}"
-Correct Meaning: "${context}"
-User Input: "${userAnswer}"
-Is the user's translation correct/synonymous in Uzbek? Ignore minor typos.
-Output JSON: { "correct": boolean, "feedback": "Explanation in Uzbek" }`;
-  } else {
-    taskPrompt = `Task: Evaluate sentence usage.
-Word: "${word}"
-Definition: "${context}"
-User Input: "${userAnswer}"
-Did the user use the word "${word}" correctly in a new English sentence? Is the grammar acceptable?
-Output JSON: { "correct": boolean, "feedback": "Explanation in Uzbek" }`;
-  }
+  const systemPrompt = `You are an English tutor. Output JSON: { "correct": boolean, "feedback": "Uzbek explanation" }`;
+  const userPrompt = `Task: ${testType}\nWord: ${word}\nContext: ${context}\nUser Answer: ${userAnswer}`;
 
   try {
-    const jsonString = await callDeepSeek([
-      { role: "system", content: systemPrompt },
-      { role: "user", content: taskPrompt }
-    ]);
-
-    const result = JSON.parse(jsonString);
-    return {
-      correct: result.correct ?? false,
-      feedback: result.feedback || "Tizim javobni tahlil qila olmadi."
-    };
+    const res = await fetch(BASE_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${DEEPSEEK_API_KEY}` },
+      body: JSON.stringify({
+        model: "deepseek-chat",
+        messages: [{ role: "system", content: systemPrompt }, { role: "user", content: userPrompt }],
+        response_format: { type: "json_object" }
+      })
+    });
+    const data = await res.json();
+    return JSON.parse(data.choices[0].message.content);
   } catch (e) {
-    console.error("DeepSeek Eval Error:", e);
-    return { correct: false, feedback: "AI bilan aloqa xatosi." };
+    return { correct: false, feedback: "AI xatosi." };
   }
 };

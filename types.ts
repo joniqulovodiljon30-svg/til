@@ -3,6 +3,7 @@ export interface Flashcard {
   id: string;
   word: string;
   ipa: string;
+  audio?: string; // New field for pronunciation audio URL
   translation: string;
   definition: string;
   example: string;
@@ -13,6 +14,7 @@ export interface Flashcard {
 export interface WordExtractionResult {
   word: string;
   ipa: string;
+  audio?: string;
   translation: string;
   definition: string;
   example: string;

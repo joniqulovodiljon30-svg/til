@@ -8,6 +8,11 @@
     <title>Flash-XB7</title>
     <link rel="manifest" href="/manifest.json">
     <link rel="icon" type="image/svg+xml" href="/logo.svg">
+    <!-- IPA FONTS FIX: Noto Sans for correct phonetic rendering -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
+    
     <script src="https://cdn.tailwindcss.com"></script>
 <script type="importmap">
 {
@@ -20,7 +25,12 @@
   }
 }
 </script>
-<link rel="stylesheet" href="/index.css">
+<style>
+  /* Global font fix for IPA elements */
+  .font-ipa {
+    font-family: 'Noto Sans', sans-serif;
+  }
+</style>
 </head>
 <body class="bg-gray-50 text-gray-900 font-sans">
     <div id="root"></div>

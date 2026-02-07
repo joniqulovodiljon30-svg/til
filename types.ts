@@ -10,7 +10,7 @@ export interface Flashcard {
   definition: string;
   example: string;
   batchId: string;
-  language: SupportedLanguage; // Used for PDF font selection
+  language: SupportedLanguage; // Used for PDF font selection and Audio generation
   createdAt: number;
 }
 

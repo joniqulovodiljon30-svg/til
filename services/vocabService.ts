@@ -57,13 +57,12 @@ export const extractWords = async (wordList: string[], lang: SupportedLanguage):
   // A. PREPARE PROMPTS FOR DEEPSEEK
   let systemPrompt = "";
   
-  // Note: We now ask the AI for "ipa" in all languages to ensure valid JSON structure,
-  // even if we overwrite it with a library later (like Pinyin or DictAPI).
+  // Note: We use STRICT prompts to ensure IPA is generated.
   if (lang === 'en') {
     systemPrompt = `You are a Vocabulary Engine. Output valid JSON Array.
     For each English word:
     - "word": Capitalized English word.
-    - "ipa": IPA pronunciation (e.g. /həˈləʊ/).
+    - "ipa": IPA pronunciation (e.g. /həˈləʊ/). REQUIRED.
     - "translation": Accurate Uzbek translation.
     - "definition": Simple English definition (A2 level).
     - "example": One clear example sentence.`;
@@ -71,7 +70,7 @@ export const extractWords = async (wordList: string[], lang: SupportedLanguage):
     systemPrompt = `You are a Vocabulary Engine. Output valid JSON Array.
     For each Spanish word:
     - "word": The word in Spanish.
-    - "ipa": IPA pronunciation (e.g. /'gato/).
+    - "ipa": IPA pronunciation enclosed in slashes (e.g. /'gato/). MUST BE INCLUDED.
     - "translation": Accurate Uzbek translation.
     - "definition": Definition in Spanish (A2 level).
     - "example": Example sentence in Spanish.`;
@@ -95,7 +94,7 @@ export const extractWords = async (wordList: string[], lang: SupportedLanguage):
       ],
       model: "deepseek-chat",
       response_format: { type: "json_object" },
-      temperature: 1.1
+      temperature: 0.3 // LOWERED TEMPERATURE FOR HIGHER ACCURACY (was 1.1)
     });
 
     const content = completion.choices[0].message.content || "{}";
@@ -110,7 +109,8 @@ export const extractWords = async (wordList: string[], lang: SupportedLanguage):
 
     // C. ENRICH DATA (Audio & IPA)
     const finalResults: WordExtractionResult[] = await Promise.all(aiResults.map(async (item) => {
-      let finalIpa = item.ipa || ""; // Default to AI provided IPA
+      // Robust check for IPA key (handles lower/uppercase/missing)
+      let finalIpa = item.ipa || item.IPA || item.phonetic || ""; 
       let finalAudio = "";
 
       // --- ENGLISH STRATEGY ---
@@ -120,16 +120,17 @@ export const extractWords = async (wordList: string[], lang: SupportedLanguage):
           finalIpa = dictData.ipa; // Prefer Dictionary IPA
           finalAudio = dictData.audio || ""; 
         } 
-        // If dictData not found, we keep the AI provided 'finalIpa'
       } 
       
       // --- SPANISH STRATEGY ---
       else if (lang === 'es') {
-        // Use the AI provided IPA (assigned above). 
-        // Ensure it has slashes if missing
+        // Ensure slashes exist if IPA is present
         if (finalIpa && !finalIpa.startsWith('/')) {
             finalIpa = `/${finalIpa}/`;
         }
+        // If AI failed completely (rare with temp 0.3), add a placeholder or leave empty
+        if (!finalIpa) finalIpa = ""; 
+        
         finalAudio = ""; // Frontend handles TTS
       } 
       
@@ -137,7 +138,6 @@ export const extractWords = async (wordList: string[], lang: SupportedLanguage):
       else if (lang === 'zh') {
         // Pinyin Generation (Overwrite AI IPA because library is more standard for Pinyin)
         try {
-          // Generates pinyin with tone marks (e.g. "nǐ hǎo")
           finalIpa = pinyin(item.word, { toneType: 'symbol' });
         } catch (e) {
           finalIpa = "";
@@ -188,7 +188,8 @@ export const evaluateAnswer = async (
         { role: "user", content: userPrompt }
       ],
       model: "deepseek-chat",
-      response_format: { type: "json_object" }
+      response_format: { type: "json_object" },
+      temperature: 0.5 // Lowered slightly for consistency
     });
     return JSON.parse(completion.choices[0].message.content || "{}");
   } catch (e) {

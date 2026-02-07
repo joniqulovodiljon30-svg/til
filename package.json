@@ -15,7 +15,9 @@
     "jspdf": "2.5.1",
     "google-translate-api-x": "^10.4.1",
       "google-translate-api-x": "^10.4.1",
-  "pinyin-pro": "^3.19.0"
+  "pinyin-pro": "^3.19.0",
+    "google-tts-api": "^2.0.2"
+    
   },
   "devDependencies": {
     "@types/node": "^22.14.0",

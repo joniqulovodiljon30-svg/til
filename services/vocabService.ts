@@ -1,7 +1,6 @@
 
 import OpenAI from "openai";
 import { pinyin } from "pinyin-pro";
-import { getAudioUrl } from "google-tts-api";
 import { WordExtractionResult, SupportedLanguage } from "../types";
 
 // --- CONFIGURATION ---
@@ -13,24 +12,6 @@ const deepseek = new OpenAI({
   apiKey: DEEPSEEK_API_KEY,
   dangerouslyAllowBrowser: true // Required for client-side usage
 });
-
-// --- HELPER: AUDIO GENERATOR ---
-function generateAudioLink(word: string, lang: SupportedLanguage): string {
-  try {
-    // Map internal lang codes to google-tts-api codes
-    // 'en' -> 'en', 'es' -> 'es', 'zh' -> 'zh-CN'
-    const ttsLang = lang === 'zh' ? 'zh-CN' : lang;
-    
-    return getAudioUrl(word, {
-      lang: ttsLang,
-      slow: false,
-      host: 'https://translate.google.com',
-    });
-  } catch (e) {
-    console.warn(`TTS Generation failed for ${word} (${lang}):`, e);
-    return "";
-  }
-}
 
 // --- 1. DICTIONARY API (ENGLISH ONLY) ---
 interface DictionaryResult {
@@ -76,10 +57,13 @@ export const extractWords = async (wordList: string[], lang: SupportedLanguage):
   // A. PREPARE PROMPTS FOR DEEPSEEK
   let systemPrompt = "";
   
+  // Note: We now ask the AI for "ipa" in all languages to ensure valid JSON structure,
+  // even if we overwrite it with a library later (like Pinyin or DictAPI).
   if (lang === 'en') {
     systemPrompt = `You are a Vocabulary Engine. Output valid JSON Array.
     For each English word:
     - "word": Capitalized English word.
+    - "ipa": IPA pronunciation (e.g. /həˈləʊ/).
     - "translation": Accurate Uzbek translation.
     - "definition": Simple English definition (A2 level).
     - "example": One clear example sentence.`;
@@ -87,6 +71,7 @@ export const extractWords = async (wordList: string[], lang: SupportedLanguage):
     systemPrompt = `You are a Vocabulary Engine. Output valid JSON Array.
     For each Spanish word:
     - "word": The word in Spanish.
+    - "ipa": IPA pronunciation (e.g. /'gato/).
     - "translation": Accurate Uzbek translation.
     - "definition": Definition in Spanish (A2 level).
     - "example": Example sentence in Spanish.`;
@@ -125,48 +110,45 @@ export const extractWords = async (wordList: string[], lang: SupportedLanguage):
 
     // C. ENRICH DATA (Audio & IPA)
     const finalResults: WordExtractionResult[] = await Promise.all(aiResults.map(async (item) => {
-      let finalIpa = "";
+      let finalIpa = item.ipa || ""; // Default to AI provided IPA
       let finalAudio = "";
 
       // --- ENGLISH STRATEGY ---
       if (lang === 'en') {
         const dictData = await fetchEnglishDictionaryData(item.word);
         if (dictData.found) {
-          finalIpa = dictData.ipa;
-          // Use Dictionary Audio if available, else Fallback to TTS
-          finalAudio = dictData.audio || generateAudioLink(item.word, 'en');
-        } else {
-          // If Dictionary API fails completely
-          finalAudio = generateAudioLink(item.word, 'en');
-        }
+          finalIpa = dictData.ipa; // Prefer Dictionary IPA
+          finalAudio = dictData.audio || ""; 
+        } 
+        // If dictData not found, we keep the AI provided 'finalIpa'
       } 
       
       // --- SPANISH STRATEGY ---
       else if (lang === 'es') {
-        // DeepSeek handles text.
-        // Google TTS handles audio.
-        finalAudio = generateAudioLink(item.word, 'es');
-        // Optional: We could ask DeepSeek for IPA in the prompt, but for now we leave it empty 
-        // or assume the user knows Spanish phonetics.
+        // Use the AI provided IPA (assigned above). 
+        // Ensure it has slashes if missing
+        if (finalIpa && !finalIpa.startsWith('/')) {
+            finalIpa = `/${finalIpa}/`;
+        }
+        finalAudio = ""; // Frontend handles TTS
       } 
       
       // --- CHINESE STRATEGY ---
       else if (lang === 'zh') {
-        // Pinyin Generation
+        // Pinyin Generation (Overwrite AI IPA because library is more standard for Pinyin)
         try {
           // Generates pinyin with tone marks (e.g. "nǐ hǎo")
           finalIpa = pinyin(item.word, { toneType: 'symbol' });
         } catch (e) {
           finalIpa = "";
         }
-        // Google TTS Audio
-        finalAudio = generateAudioLink(item.word, 'zh');
+        finalAudio = ""; // Frontend handles TTS
       }
 
       return {
         word: item.word,
-        ipa: finalIpa, // populated for EN (dict) and ZH (pinyin)
-        audio: finalAudio, // Always populated via TTS fallback
+        ipa: finalIpa, 
+        audio: finalAudio,
         translation: item.translation,
         definition: item.definition,
         example: item.example

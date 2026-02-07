@@ -58,17 +58,16 @@ export const generatePDF = async (batches: { id: string; cards: Flashcard[] }[])
 
   // 1. Analyze Fonts Needed
   let needsChinese = false;
-  let needsStandard = false;
   
   batches.forEach(b => {
     b.cards.forEach(c => {
       if (c.language === 'zh') needsChinese = true;
-      else needsStandard = true;
     });
   });
 
   // 2. Load Fonts
-  await loadFont('standard'); // Always load for UI/Fallbacks
+  // Always load Standard for EN, ES, and UI elements (like Back side labels)
+  await loadFont('standard'); 
   if (needsChinese) await loadFont('chinese');
 
   // 3. Draw Content
@@ -102,7 +101,12 @@ export const generatePDF = async (batches: { id: string; cards: Flashcard[] }[])
         if (!card.word) return;
         const x = (idx % COLS) * CARD_WIDTH;
         const y = Math.floor(idx / COLS) * CARD_HEIGHT;
-        const fontToUse = (card.language === 'zh' && loadedFonts.has('chinese')) ? FONTS.chinese.name : (loadedFonts.has('standard') ? FONTS.standard.name : "helvetica");
+        
+        // Font Selection for FRONT:
+        // IF Chinese, use Chinese font. ELSE use Standard.
+        const fontToUse = (card.language === 'zh' && loadedFonts.has('chinese')) 
+                          ? FONTS.chinese.name 
+                          : (loadedFonts.has('standard') ? FONTS.standard.name : "helvetica");
         
         drawFront(doc, x, y, card, fontToUse, CARD_WIDTH, CARD_HEIGHT, batch.id, idx + 1);
       });
@@ -118,10 +122,14 @@ export const generatePDF = async (batches: { id: string; cards: Flashcard[] }[])
         const x = mirroredCol * CARD_WIDTH;
         const y = row * CARD_HEIGHT;
         
-        // Back usually contains Uzbek (Standard Font) + Target Lang defs
-        // We use Standard for Uzbek titles, and Target font for defs if needed.
-        // For simplicity, we assume Noto Sans SC covers Latin well enough or we switch.
-        const fontToUse = (card.language === 'zh' && loadedFonts.has('chinese')) ? FONTS.chinese.name : (loadedFonts.has('standard') ? FONTS.standard.name : "helvetica");
+        // Font Selection for BACK:
+        // Title (Translation) is usually Uzbek (Latin).
+        // Definition/Example is in Target Language.
+        // If Target is Chinese, we need Chinese font.
+        // Noto Sans SC usually includes Latin characters too, so we can use it for the whole card safely if language is Chinese.
+        const fontToUse = (card.language === 'zh' && loadedFonts.has('chinese')) 
+                          ? FONTS.chinese.name 
+                          : (loadedFonts.has('standard') ? FONTS.standard.name : "helvetica");
 
         drawBack(doc, x, y, card, fontToUse, CARD_WIDTH, CARD_HEIGHT, batch.id, idx + 1);
       });
@@ -162,7 +170,11 @@ function drawFront(doc: jsPDF, x: number, y: number, card: Flashcard, font: stri
   if (card.ipa) {
     doc.setFontSize(10);
     doc.setTextColor(100);
-    doc.text(`[${card.ipa}]`, cx, cy + 10, { align: "center" });
+    // Add brackets for IPA if Latin, maybe not for Pinyin? 
+    // Let's keep consistent: if it looks like Pinyin (no slashes), maybe add brackets or leave as is.
+    // Logic: if language is ZH, pinyin often doesn't need brackets, but formatting style preference.
+    // We'll just print IPA string as is from service.
+    doc.text(card.language === 'zh' ? `[${card.ipa}]` : card.ipa, cx, cy + 10, { align: "center" });
   }
 }
 

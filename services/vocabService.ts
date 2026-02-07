@@ -17,15 +17,17 @@ const deepseek = new OpenAI({
 // --- HELPER: AUDIO GENERATOR ---
 function generateAudioLink(word: string, lang: SupportedLanguage): string {
   try {
-    // google-tts-api maps: 'en'->'en', 'es'->'es', 'zh'->'zh-CN'
+    // Map internal lang codes to google-tts-api codes
+    // 'en' -> 'en', 'es' -> 'es', 'zh' -> 'zh-CN'
     const ttsLang = lang === 'zh' ? 'zh-CN' : lang;
+    
     return getAudioUrl(word, {
       lang: ttsLang,
       slow: false,
       host: 'https://translate.google.com',
     });
   } catch (e) {
-    console.warn("TTS Generation failed:", e);
+    console.warn(`TTS Generation failed for ${word} (${lang}):`, e);
     return "";
   }
 }
@@ -45,14 +47,14 @@ async function fetchEnglishDictionaryData(word: string): Promise<DictionaryResul
     const data = await res.json();
     const entry = data[0];
 
-    // IPA
+    // Extract IPA
     let ipa = entry.phonetic || "";
     if (!ipa && entry.phonetics?.length > 0) {
       const p = entry.phonetics.find((p: any) => p.text);
       if (p) ipa = p.text;
     }
 
-    // Audio
+    // Extract Audio (Prefer US English)
     let audio = "";
     if (entry.phonetics?.length > 0) {
       const audioEntry = entry.phonetics.find((p: any) => p.audio && p.audio.includes('-us.mp3')) 
@@ -66,7 +68,7 @@ async function fetchEnglishDictionaryData(word: string): Promise<DictionaryResul
   }
 }
 
-// --- 2. MAIN LOGIC ---
+// --- 2. MAIN EXTRACTION LOGIC ---
 export const extractWords = async (wordList: string[], lang: SupportedLanguage): Promise<WordExtractionResult[]> => {
   if (wordList.length === 0) return [];
   console.log(`Processing ${wordList.length} words in ${lang}...`);
@@ -100,7 +102,7 @@ export const extractWords = async (wordList: string[], lang: SupportedLanguage):
   const userPrompt = `Words: ${JSON.stringify(wordList)}`;
 
   try {
-    // B. CALL DEEPSEEK (Parallel with Dictionary/TTS if possible, but we wait for context first)
+    // B. CALL DEEPSEEK
     const completion = await deepseek.chat.completions.create({
       messages: [
         { role: "system", content: systemPrompt },
@@ -131,29 +133,29 @@ export const extractWords = async (wordList: string[], lang: SupportedLanguage):
         const dictData = await fetchEnglishDictionaryData(item.word);
         if (dictData.found) {
           finalIpa = dictData.ipa;
+          // Use Dictionary Audio if available, else Fallback to TTS
           finalAudio = dictData.audio || generateAudioLink(item.word, 'en');
         } else {
-          // Fallback if dict fails
+          // If Dictionary API fails completely
           finalAudio = generateAudioLink(item.word, 'en');
-          // We assume DeepSeek didn't provide IPA here to save tokens, 
-          // but we could ask for it. For now, leave empty or handle in PDF.
         }
       } 
       
       // --- SPANISH STRATEGY ---
       else if (lang === 'es') {
-        // DeepSeek doesn't reliably return standard IPA unless forced.
-        // We will generate audio via Google TTS.
+        // DeepSeek handles text.
+        // Google TTS handles audio.
         finalAudio = generateAudioLink(item.word, 'es');
-        // Ideally, we'd ask DeepSeek for IPA, but to keep it simple we rely on user reading skills or add a second call. 
-        // For this version, we will leave IPA empty or assume the user can read Spanish phonetics (consistent).
+        // Optional: We could ask DeepSeek for IPA in the prompt, but for now we leave it empty 
+        // or assume the user knows Spanish phonetics.
       } 
       
       // --- CHINESE STRATEGY ---
       else if (lang === 'zh') {
         // Pinyin Generation
         try {
-          finalIpa = pinyin(item.word, { toneType: 'mark' });
+          // Generates pinyin with tone marks (e.g. "nǐ hǎo")
+          finalIpa = pinyin(item.word, { toneType: 'symbol' });
         } catch (e) {
           finalIpa = "";
         }
@@ -163,8 +165,8 @@ export const extractWords = async (wordList: string[], lang: SupportedLanguage):
 
       return {
         word: item.word,
-        ipa: finalIpa,
-        audio: finalAudio,
+        ipa: finalIpa, // populated for EN (dict) and ZH (pinyin)
+        audio: finalAudio, // Always populated via TTS fallback
         translation: item.translation,
         definition: item.definition,
         example: item.example

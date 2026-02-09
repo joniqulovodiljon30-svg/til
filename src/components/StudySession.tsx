@@ -29,7 +29,17 @@ const StudySession: React.FC<StudySessionProps> = ({ cards, onExit, language, on
   // Audio playing state
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
 
+
+
+  // Safety check for index
+  useEffect(() => {
+    if (currentIndex >= cards.length && cards.length > 0) {
+      setCurrentIndex(Math.max(0, cards.length - 1));
+    }
+  }, [cards.length, currentIndex]);
+
   const currentCard = cards[currentIndex];
+
 
   useEffect(() => {
     // Reset states when card changes
@@ -43,7 +53,7 @@ const StudySession: React.FC<StudySessionProps> = ({ cards, onExit, language, on
     if ('speechSynthesis' in window) {
       window.speechSynthesis.cancel();
     }
-  }, [currentIndex, mode]);
+  }, [currentCard?.id, mode]); // Use ID instead of index to avoid flicker on list change
 
   const handleNext = () => {
     if (currentIndex < cards.length - 1) {
@@ -172,12 +182,29 @@ const StudySession: React.FC<StudySessionProps> = ({ cards, onExit, language, on
     );
   }
 
+  // Check for empty state BEFORE rendering main UI
+  if (cards.length === 0) {
+    return (
+      <div className="fixed inset-0 z-50 bg-slate-900 text-white flex flex-col items-center justify-center p-6 animate-in fade-in">
+        <div className="w-24 h-24 bg-emerald-500 rounded-full flex items-center justify-center mb-6 shadow-2xl shadow-emerald-900/50">
+          <svg className="w-12 h-12 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
+        </div>
+        <h2 className="text-3xl font-black mb-2 text-center">All Caught Up!</h2>
+        <p className="text-slate-400 mb-8 text-center max-w-xs">No more cards in this list. Great job!</p>
+        <button onClick={onExit} className="bg-white text-slate-900 px-8 py-3 rounded-full font-black text-xs uppercase tracking-widest hover:scale-105 transition-transform">
+          Back to Dashboard
+        </button>
+      </div>
+    );
+  }
+
+
   return (
     <div className="fixed inset-0 z-50 bg-gray-50 flex flex-col h-screen w-screen font-sans text-slate-900">
       {/* HEADER */}
       <div className="bg-white border-b border-gray-200 px-6 py-4 flex justify-between items-center shadow-sm shrink-0 z-10">
         <div className="flex items-center gap-4">
-          <button onClick={() => setMode('MENU')} className="text-slate-400 hover:text-slate-900">
+          <button onClick={onExit} className="text-slate-400 hover:text-slate-900">
             <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
           </button>
           <div>
@@ -327,8 +354,8 @@ const StudySession: React.FC<StudySessionProps> = ({ cards, onExit, language, on
                 onToggleMistake(currentCard.id);
               }}
               className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-all shadow-lg active:scale-95 ${currentCard.isMistake
-                  ? 'bg-emerald-100 text-emerald-600 hover:bg-emerald-200 border-2 border-emerald-300'
-                  : 'bg-rose-50 text-rose-400 hover:bg-rose-100 border-2 border-transparent hover:border-rose-200'
+                ? 'bg-emerald-100 text-emerald-600 hover:bg-emerald-200 border-2 border-emerald-300'
+                : 'bg-rose-50 text-rose-400 hover:bg-rose-100 border-2 border-transparent hover:border-rose-200'
                 }`}
               title={currentCard.isMistake ? "Mark as Mastered (Remove from Mistakes)" : "Mark as Mistake"}
             >

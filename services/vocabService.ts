@@ -1,6 +1,6 @@
 
 import OpenAI from "openai";
-import { pinyin } from "pinyin-pro";
+import pinyin from "pinyin-pro";
 import { WordExtractionResult, SupportedLanguage } from "../types";
 
 // --- CONFIGURATION ---
@@ -24,7 +24,7 @@ async function fetchEnglishDictionaryData(word: string): Promise<DictionaryResul
   try {
     const res = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word)}`);
     if (!res.ok) return { ipa: "", found: false };
-    
+
     const data = await res.json();
     const entry = data[0];
 
@@ -38,8 +38,8 @@ async function fetchEnglishDictionaryData(word: string): Promise<DictionaryResul
     // Extract Audio (Prefer US English)
     let audio = "";
     if (entry.phonetics?.length > 0) {
-      const audioEntry = entry.phonetics.find((p: any) => p.audio && p.audio.includes('-us.mp3')) 
-                      || entry.phonetics.find((p: any) => p.audio && p.audio !== "");
+      const audioEntry = entry.phonetics.find((p: any) => p.audio && p.audio.includes('-us.mp3'))
+        || entry.phonetics.find((p: any) => p.audio && p.audio !== "");
       if (audioEntry) audio = audioEntry.audio;
     }
 
@@ -56,7 +56,7 @@ export const extractWords = async (wordList: string[], lang: SupportedLanguage):
 
   // A. PREPARE PROMPTS FOR DEEPSEEK
   let systemPrompt = "";
-  
+
   // Note: We use STRICT prompts to ensure IPA is generated.
   if (lang === 'en') {
     systemPrompt = `You are a Vocabulary Engine. Output valid JSON Array.
@@ -99,7 +99,7 @@ export const extractWords = async (wordList: string[], lang: SupportedLanguage):
 
     const content = completion.choices[0].message.content || "{}";
     const parsed = JSON.parse(content);
-    
+
     // Normalize response to array
     let aiResults: any[] = [];
     if (Array.isArray(parsed)) aiResults = parsed;
@@ -110,7 +110,7 @@ export const extractWords = async (wordList: string[], lang: SupportedLanguage):
     // C. ENRICH DATA (Audio & IPA)
     const finalResults: WordExtractionResult[] = await Promise.all(aiResults.map(async (item) => {
       // Robust check for IPA key (handles lower/uppercase/missing)
-      let finalIpa = item.ipa || item.IPA || item.phonetic || ""; 
+      let finalIpa = item.ipa || item.IPA || item.phonetic || "";
       let finalAudio = "";
 
       // --- ENGLISH STRATEGY ---
@@ -118,27 +118,27 @@ export const extractWords = async (wordList: string[], lang: SupportedLanguage):
         const dictData = await fetchEnglishDictionaryData(item.word);
         if (dictData.found) {
           finalIpa = dictData.ipa; // Prefer Dictionary IPA
-          finalAudio = dictData.audio || ""; 
-        } 
-      } 
-      
+          finalAudio = dictData.audio || "";
+        }
+      }
+
       // --- SPANISH STRATEGY ---
       else if (lang === 'es') {
         // Ensure slashes exist if IPA is present
         if (finalIpa && !finalIpa.startsWith('/')) {
-            finalIpa = `/${finalIpa}/`;
+          finalIpa = `/${finalIpa}/`;
         }
         // If AI failed completely (rare with temp 0.3), add a placeholder or leave empty
-        if (!finalIpa) finalIpa = ""; 
-        
+        if (!finalIpa) finalIpa = "";
+
         finalAudio = ""; // Frontend handles TTS
-      } 
-      
+      }
+
       // --- CHINESE STRATEGY ---
       else if (lang === 'zh') {
         // Pinyin Generation (Overwrite AI IPA because library is more standard for Pinyin)
         try {
-          finalIpa = pinyin(item.word, { toneType: 'symbol' });
+          finalIpa = pinyin.pinyin(item.word, { toneType: 'symbol' });
         } catch (e) {
           finalIpa = "";
         }
@@ -147,7 +147,7 @@ export const extractWords = async (wordList: string[], lang: SupportedLanguage):
 
       return {
         word: item.word,
-        ipa: finalIpa, 
+        ipa: finalIpa,
         audio: finalAudio,
         translation: item.translation,
         definition: item.definition,
@@ -174,8 +174,8 @@ export const evaluateAnswer = async (
   lang: SupportedLanguage
 ): Promise<{ correct: boolean; feedback: string }> => {
   const langName = lang === 'en' ? 'English' : lang === 'es' ? 'Spanish' : 'Chinese';
-  
-  const systemPrompt = testType === 'SENTENCE' 
+
+  const systemPrompt = testType === 'SENTENCE'
     ? `You are a ${langName} Teacher. Check if the user used "${word}" correctly in a ${langName} sentence. JSON Output: { "correct": boolean, "feedback": "Explanation in Uzbek" }`
     : `You are a ${langName} Tutor. Check translation of "${word}" (${langName}) to Uzbek. Context: ${context}. JSON Output: { "correct": boolean, "feedback": "Explanation in Uzbek" }`;
 

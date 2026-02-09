@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
-import { Flashcard, SupportedLanguage } from '../types';
-import { evaluateAnswer } from '../services/vocabService';
+import { Flashcard, SupportedLanguage } from '../../types';
+import { evaluateAnswer } from '../../services/vocabService';
 
 interface StudySessionProps {
   cards: Flashcard[];
@@ -15,7 +15,7 @@ type TestState = 'INPUT' | 'EVALUATING' | 'RESULT';
 
 const StudySession: React.FC<StudySessionProps> = ({ cards, onExit, language }) => {
   const [mode, setMode] = useState<Mode>('MENU');
-  
+
   // Study State
   const [currentIndex, setCurrentIndex] = useState(0);
   const [studySide, setStudySide] = useState<CardSide>('FRONT');
@@ -24,7 +24,7 @@ const StudySession: React.FC<StudySessionProps> = ({ cards, onExit, language }) 
   const [userAnswer, setUserAnswer] = useState('');
   const [testState, setTestState] = useState<TestState>('INPUT');
   const [evaluation, setEvaluation] = useState<{ correct: boolean; feedback: string } | null>(null);
-  
+
   // Audio playing state
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
 
@@ -37,7 +37,7 @@ const StudySession: React.FC<StudySessionProps> = ({ cards, onExit, language }) 
     setUserAnswer('');
     setEvaluation(null);
     setIsPlayingAudio(false);
-    
+
     // Stop any ongoing speech when switching cards
     if ('speechSynthesis' in window) {
       window.speechSynthesis.cancel();
@@ -58,8 +58,8 @@ const StudySession: React.FC<StudySessionProps> = ({ cards, onExit, language }) 
 
   // --- AUDIO LOGIC (HYBRID APPROACH) ---
   const playAudio = (e: React.MouseEvent) => {
-    e.stopPropagation(); 
-    
+    e.stopPropagation();
+
     // 1. Priority: Play Static MP3 if available (English Dictionary)
     if (currentCard.audio) {
       setIsPlayingAudio(true);
@@ -78,7 +78,7 @@ const StudySession: React.FC<StudySessionProps> = ({ cards, onExit, language }) 
       window.speechSynthesis.cancel();
 
       const utterance = new SpeechSynthesisUtterance(currentCard.word);
-      
+
       // Map generic lang to specific Locale
       switch (language) {
         case 'es': utterance.lang = 'es-ES'; break;
@@ -87,7 +87,7 @@ const StudySession: React.FC<StudySessionProps> = ({ cards, onExit, language }) 
       }
 
       utterance.rate = 0.9; // Slightly slower for better clarity
-      
+
       utterance.onstart = () => setIsPlayingAudio(true);
       utterance.onend = () => setIsPlayingAudio(false);
       utterance.onerror = (e) => {
@@ -111,19 +111,19 @@ const StudySession: React.FC<StudySessionProps> = ({ cards, onExit, language }) 
     if (!userAnswer.trim()) return;
 
     setTestState('EVALUATING');
-    
+
     try {
       const isTranslation = mode === 'TEST_TRANSLATION';
       const context = isTranslation ? currentCard.translation : currentCard.definition;
-      
+
       const result = await evaluateAnswer(
-        currentCard.word, 
-        context, 
-        userAnswer, 
+        currentCard.word,
+        context,
+        userAnswer,
         isTranslation ? 'TRANSLATION' : 'SENTENCE',
         language
       );
-      
+
       setEvaluation(result);
       setTestState('RESULT');
     } catch (e) {
@@ -139,11 +139,11 @@ const StudySession: React.FC<StudySessionProps> = ({ cards, onExit, language }) 
       <div className="fixed inset-0 z-50 bg-slate-900 text-white flex flex-col items-center justify-center p-6">
         <h2 className="text-3xl font-black tracking-tighter mb-2">CHOOSE MODE</h2>
         <div className="text-xs font-bold uppercase tracking-widest bg-slate-800 px-3 py-1 rounded mb-8 text-indigo-400">
-           Language: {language === 'en' ? 'English' : language === 'es' ? 'Spanish' : 'Chinese'}
+          Language: {language === 'en' ? 'English' : language === 'es' ? 'Spanish' : 'Chinese'}
         </div>
-        
+
         <div className="grid gap-4 w-full max-w-md">
-          <button 
+          <button
             onClick={() => setMode('STUDY')}
             className="bg-indigo-600 hover:bg-indigo-500 p-6 rounded-xl text-left transition-all group"
           >
@@ -151,7 +151,7 @@ const StudySession: React.FC<StudySessionProps> = ({ cards, onExit, language }) 
             <p className="text-indigo-200 text-sm">Review cards. Flip Front/Back.</p>
           </button>
 
-          <button 
+          <button
             onClick={() => setMode('TEST_TRANSLATION')}
             className="bg-emerald-700 hover:bg-emerald-600 p-6 rounded-xl text-left transition-all group"
           >
@@ -159,7 +159,7 @@ const StudySession: React.FC<StudySessionProps> = ({ cards, onExit, language }) 
             <p className="text-emerald-200 text-sm">Type the meaning in Uzbek.</p>
           </button>
 
-          <button 
+          <button
             onClick={() => setMode('TEST_SENTENCE')}
             className="bg-rose-700 hover:bg-rose-600 p-6 rounded-xl text-left transition-all group"
           >
@@ -167,7 +167,7 @@ const StudySession: React.FC<StudySessionProps> = ({ cards, onExit, language }) 
             <p className="text-rose-200 text-sm">Write a sentence using the word.</p>
           </button>
 
-          <button 
+          <button
             onClick={onExit}
             className="mt-4 py-4 text-slate-500 hover:text-white font-bold text-xs uppercase tracking-widest"
           >
@@ -196,7 +196,7 @@ const StudySession: React.FC<StudySessionProps> = ({ cards, onExit, language }) 
           </div>
         </div>
         <div className="w-24 bg-gray-100 h-1 rounded-full overflow-hidden">
-          <div 
+          <div
             className="bg-indigo-600 h-full transition-all duration-300"
             style={{ width: `${((currentIndex + 1) / cards.length) * 100}%` }}
           />
@@ -206,28 +206,28 @@ const StudySession: React.FC<StudySessionProps> = ({ cards, onExit, language }) 
       {/* MAIN CONTENT AREA */}
       <div className="flex-1 flex flex-col items-center justify-center p-6 overflow-y-auto">
         <div className="w-full max-w-2xl">
-          
+
           {/* STUDY MODE CARD */}
           {mode === 'STUDY' && (
-            <div 
+            <div
               onClick={toggleStudySide}
               className="bg-white rounded-2xl shadow-xl border border-gray-200 min-h-[400px] flex flex-col items-center justify-center text-center p-10 cursor-pointer hover:border-indigo-400 transition-all select-none relative"
             >
               {studySide === 'FRONT' ? (
                 <div className="animate-in fade-in zoom-in-95 duration-300 flex flex-col items-center">
                   <h1 className="text-5xl md:text-7xl font-black text-slate-900 mb-4 tracking-tighter break-all">{currentCard.word}</h1>
-                  
+
                   {/* IPA & Audio Section */}
                   <div className="flex items-center gap-3 mb-6">
                     <p className="text-xl md:text-2xl font-ipa text-slate-400">
-                        {currentCard.ipa ? (language === 'zh' ? `[${currentCard.ipa}]` : currentCard.ipa) : ''}
+                      {currentCard.ipa ? (language === 'zh' ? `[${currentCard.ipa}]` : currentCard.ipa) : ''}
                     </p>
                     {/* Always show speaker if we can play audio (either MP3 or TTS) */}
-                    <button 
+                    <button
                       onClick={playAudio}
                       className={`p-2 rounded-full transition-all ${isPlayingAudio ? 'bg-indigo-100 text-indigo-600 scale-110' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}
                     >
-                       <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" /></svg>
+                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" /></svg>
                     </button>
                   </div>
 
@@ -250,7 +250,7 @@ const StudySession: React.FC<StudySessionProps> = ({ cards, onExit, language }) 
           {/* TEST MODE CARD */}
           {(mode === 'TEST_TRANSLATION' || mode === 'TEST_SENTENCE') && (
             <div className="bg-white rounded-2xl shadow-xl border border-gray-200 min-h-[400px] flex flex-col p-8 md:p-12">
-              
+
               <div className="text-center mb-8">
                 <span className="inline-block px-3 py-1 bg-slate-100 text-slate-500 rounded text-[10px] font-black uppercase tracking-widest mb-4">
                   {mode === 'TEST_TRANSLATION' ? 'Translate to Uzbek' : 'Write a sentence'}
@@ -272,11 +272,10 @@ const StudySession: React.FC<StudySessionProps> = ({ cards, onExit, language }) 
                   <button
                     onClick={submitAnswer}
                     disabled={!userAnswer.trim() || testState === 'EVALUATING'}
-                    className={`w-full py-4 rounded-xl font-black text-sm uppercase tracking-widest transition-all ${
-                      testState === 'EVALUATING' 
-                        ? 'bg-slate-100 text-slate-400' 
+                    className={`w-full py-4 rounded-xl font-black text-sm uppercase tracking-widest transition-all ${testState === 'EVALUATING'
+                        ? 'bg-slate-100 text-slate-400'
                         : 'bg-indigo-600 text-white hover:bg-indigo-500 shadow-lg shadow-indigo-200'
-                    }`}
+                      }`}
                   >
                     {testState === 'EVALUATING' ? 'AI Analyzing...' : 'Check Answer'}
                   </button>
@@ -300,13 +299,13 @@ const StudySession: React.FC<StudySessionProps> = ({ cards, onExit, language }) 
                       {evaluation?.feedback}
                     </p>
                   </div>
-                  
+
                   {/* Reference Answer Display */}
                   <div className="mb-8 p-4 bg-slate-50 rounded-lg border border-slate-100">
                     <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Correct Meaning</p>
                     <p className="text-slate-800 font-medium">{currentCard.translation}</p>
                     {mode === 'TEST_SENTENCE' && (
-                       <p className="text-sm text-slate-500 italic mt-2 font-ipa">Ex: "{currentCard.example}"</p>
+                      <p className="text-sm text-slate-500 italic mt-2 font-ipa">Ex: "{currentCard.example}"</p>
                     )}
                   </div>
 
@@ -331,22 +330,20 @@ const StudySession: React.FC<StudySessionProps> = ({ cards, onExit, language }) 
             <button
               onClick={handlePrev}
               disabled={currentIndex === 0}
-              className={`flex-1 py-4 rounded-xl font-black text-xs uppercase tracking-widest transition-all ${
-                currentIndex === 0 
-                ? 'bg-gray-50 text-gray-300 cursor-not-allowed' 
-                : 'bg-white border border-gray-200 text-slate-900 hover:border-slate-900 hover:shadow-md'
-              }`}
+              className={`flex-1 py-4 rounded-xl font-black text-xs uppercase tracking-widest transition-all ${currentIndex === 0
+                  ? 'bg-gray-50 text-gray-300 cursor-not-allowed'
+                  : 'bg-white border border-gray-200 text-slate-900 hover:border-slate-900 hover:shadow-md'
+                }`}
             >
               Previous
             </button>
             <button
               onClick={handleNext}
               disabled={currentIndex === cards.length - 1}
-              className={`flex-1 py-4 rounded-xl font-black text-xs uppercase tracking-widest transition-all ${
-                currentIndex === cards.length - 1
-                ? 'bg-gray-50 text-gray-300 cursor-not-allowed'
-                : 'bg-slate-900 text-white hover:bg-slate-800 shadow-lg shadow-slate-200'
-              }`}
+              className={`flex-1 py-4 rounded-xl font-black text-xs uppercase tracking-widest transition-all ${currentIndex === cards.length - 1
+                  ? 'bg-gray-50 text-gray-300 cursor-not-allowed'
+                  : 'bg-slate-900 text-white hover:bg-slate-800 shadow-lg shadow-slate-200'
+                }`}
             >
               Next
             </button>

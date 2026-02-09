@@ -1,6 +1,6 @@
 
 import React, { useEffect, useState } from 'react';
-import { addToBlacklist, removeFromBlacklist } from '../services/supabase';
+import { addToBlacklist, removeFromBlacklist } from '../../services/supabase';
 
 const SecurityHandler: React.FC = () => {
   const [status, setStatus] = useState<string>('Processing...');
@@ -50,7 +50,7 @@ const SecurityHandler: React.FC = () => {
   return (
     <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4 font-sans">
       <div className="max-w-sm w-full bg-white rounded-3xl p-8 shadow-2xl text-center transform transition-all animate-in fade-in zoom-in-95 duration-300">
-        
+
         <div className={`w-24 h-24 mx-auto mb-6 rounded-full flex items-center justify-center text-5xl shadow-inner ${isSuccess ? 'bg-indigo-50' : 'bg-red-50'}`}>
           {icon}
         </div>
@@ -58,12 +58,12 @@ const SecurityHandler: React.FC = () => {
         <h1 className="text-2xl font-black text-slate-900 mb-2 uppercase tracking-tight">
           System Action
         </h1>
-        
+
         <p className="text-slate-500 font-medium mb-8 leading-relaxed">
           {status}
         </p>
 
-        <button 
+        <button
           onClick={handleClose}
           className="w-full py-4 bg-slate-900 text-white rounded-xl font-black text-xs uppercase tracking-[0.2em] hover:bg-slate-800 transition-all active:scale-95 shadow-lg shadow-slate-200"
         >

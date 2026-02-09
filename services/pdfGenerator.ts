@@ -1,5 +1,5 @@
 
-import { jsPDF } from "jspdf";
+import jsPDF from "jspdf";
 import { Flashcard } from "../types";
 
 // Helper: Convert buffer to base64
@@ -44,7 +44,7 @@ export const generatePDF = async (batches: { id: string; cards: Flashcard[] }[])
       if (!response.ok) throw new Error(`Font fetch failed: ${response.status}`);
       const buffer = await response.arrayBuffer();
       const base64 = arrayBufferToBase64(buffer);
-      
+
       const fileName = `${FONTS[key].name}.ttf`;
       doc.addFileToVFS(fileName, base64);
       doc.addFont(fileName, FONTS[key].name, "normal");
@@ -58,7 +58,7 @@ export const generatePDF = async (batches: { id: string; cards: Flashcard[] }[])
 
   // 1. Analyze Fonts Needed
   let needsChinese = false;
-  
+
   batches.forEach(b => {
     b.cards.forEach(c => {
       if (c.language === 'zh') needsChinese = true;
@@ -67,7 +67,7 @@ export const generatePDF = async (batches: { id: string; cards: Flashcard[] }[])
 
   // 2. Load Fonts
   // Always load Standard for EN, ES, and UI elements (like Back side labels)
-  await loadFont('standard'); 
+  await loadFont('standard');
   if (needsChinese) await loadFont('chinese');
 
   // 3. Draw Content
@@ -84,7 +84,7 @@ export const generatePDF = async (batches: { id: string; cards: Flashcard[] }[])
   // Render Loop
   batches.forEach((batch, batchIdx) => {
     const cards = batch.cards;
-    
+
     for (let i = 0; i < cards.length; i += CARDS_PER_PAGE) {
       // Chunking
       const chunk = cards.slice(i, i + CARDS_PER_PAGE);
@@ -101,13 +101,13 @@ export const generatePDF = async (batches: { id: string; cards: Flashcard[] }[])
         if (!card.word) return;
         const x = (idx % COLS) * CARD_WIDTH;
         const y = Math.floor(idx / COLS) * CARD_HEIGHT;
-        
+
         // Font Selection for FRONT:
         // IF Chinese, use Chinese font. ELSE use Standard.
-        const fontToUse = (card.language === 'zh' && loadedFonts.has('chinese')) 
-                          ? FONTS.chinese.name 
-                          : (loadedFonts.has('standard') ? FONTS.standard.name : "helvetica");
-        
+        const fontToUse = (card.language === 'zh' && loadedFonts.has('chinese'))
+          ? FONTS.chinese.name
+          : (loadedFonts.has('standard') ? FONTS.standard.name : "helvetica");
+
         drawFront(doc, x, y, card, fontToUse, CARD_WIDTH, CARD_HEIGHT, batch.id, idx + 1);
       });
 
@@ -121,15 +121,15 @@ export const generatePDF = async (batches: { id: string; cards: Flashcard[] }[])
         const mirroredCol = (COLS - 1) - col;
         const x = mirroredCol * CARD_WIDTH;
         const y = row * CARD_HEIGHT;
-        
+
         // Font Selection for BACK:
         // Title (Translation) is usually Uzbek (Latin).
         // Definition/Example is in Target Language.
         // If Target is Chinese, we need Chinese font.
         // Noto Sans SC usually includes Latin characters too, so we can use it for the whole card safely if language is Chinese.
-        const fontToUse = (card.language === 'zh' && loadedFonts.has('chinese')) 
-                          ? FONTS.chinese.name 
-                          : (loadedFonts.has('standard') ? FONTS.standard.name : "helvetica");
+        const fontToUse = (card.language === 'zh' && loadedFonts.has('chinese'))
+          ? FONTS.chinese.name
+          : (loadedFonts.has('standard') ? FONTS.standard.name : "helvetica");
 
         drawBack(doc, x, y, card, fontToUse, CARD_WIDTH, CARD_HEIGHT, batch.id, idx + 1);
       });
@@ -159,7 +159,7 @@ function drawFront(doc: jsPDF, x: number, y: number, card: Flashcard, font: stri
   doc.setFont(font, "normal");
   const cx = x + w / 2;
   const cy = y + h / 2;
-  
+
   // Word
   doc.setFontSize(22);
   doc.setTextColor(0);
@@ -192,7 +192,7 @@ function drawBack(doc: jsPDF, x: number, y: number, card: Flashcard, font: strin
 
   doc.setFont(font, "normal");
   const cx = x + w / 2;
-  
+
   // Translation (Uzbek)
   let cursor = y + 20;
   doc.setFontSize(14);

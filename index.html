@@ -1,25 +1,28 @@
-
 <!DOCTYPE html>
 <html lang="uz">
+
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="theme-color" content="#111827">
-    <title>Flash-XB7</title>
-    <link rel="manifest" href="/manifest.json">
-    <link rel="icon" type="image/svg+xml" href="/logo.svg">
-    <!-- IPA FONTS FIX: Noto Sans for correct phonetic rendering -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans:ital,wght@0,400;0,700;1,400&family=Noto+Sans+SC:wght@400;700&display=swap" rel="stylesheet">
-    
-    <script src="https://cdn.tailwindcss.com"></script>
-<script type="importmap">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#111827">
+  <title>Flash-XB7</title>
+  <link rel="manifest" href="/manifest.json">
+  <link rel="icon" type="image/svg+xml" href="/logo.svg">
+  <!-- IPA FONTS FIX: Noto Sans for correct phonetic rendering -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Noto+Sans:ital,wght@0,400;0,700;1,400&family=Noto+Sans+SC:wght@400;700&display=swap"
+    rel="stylesheet">
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script type="importmap">
 {
   "imports": {
     "react/": "https://esm.sh/react@^19.2.4/",
     "react": "https://esm.sh/react@^19.2.4",
     "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
+    "react-dom/client": "https://esm.sh/react-dom@^19.2.4/client",
     "@google/genai": "https://esm.sh/@google/genai@^1.39.0",
     "jspdf": "https://esm.sh/jspdf@2.5.1",
     "pinyin-pro": "https://esm.sh/pinyin-pro@3.18.2",
@@ -31,29 +34,31 @@
   }
 }
 </script>
-<style>
-  /* Global font fix for IPA elements */
-  .font-ipa {
-    font-family: 'Noto Sans', 'Noto Sans SC', sans-serif;
-  }
-</style>
-<link rel="stylesheet" href="/index.css">
+  <style>
+    /* Global font fix for IPA elements */
+    .font-ipa {
+      font-family: 'Noto Sans', 'Noto Sans SC', sans-serif;
+    }
+  </style>
+  <link rel="stylesheet" href="/index.css">
 </head>
+
 <body class="bg-gray-50 text-gray-900 font-sans">
-    <div id="root"></div>
-    <script type="module" src="/index.tsx"></script>
-    <script>
-      if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
-          navigator.serviceWorker.register('/sw.js')
-            .then(registration => {
-              console.log('SW registered: ', registration);
-            })
-            .catch(registrationError => {
-              console.log('SW registration failed: ', registrationError);
-            });
-        });
-      }
-    </script>
+  <div id="root"></div>
+  <script type="module" src="/index.tsx"></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js')
+          .then(registration => {
+            console.log('SW registered: ', registration);
+          })
+          .catch(registrationError => {
+            console.log('SW registration failed: ', registrationError);
+          });
+      });
+    }
+  </script>
 </body>
+
 </html>

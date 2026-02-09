@@ -7,18 +7,19 @@ interface StudySessionProps {
   cards: Flashcard[];
   onExit: () => void;
   language: SupportedLanguage;
+  onToggleMistake: (cardId: string) => void;
 }
 
 type Mode = 'MENU' | 'STUDY' | 'TEST_TRANSLATION' | 'TEST_SENTENCE';
 type CardSide = 'FRONT' | 'BACK';
 type TestState = 'INPUT' | 'EVALUATING' | 'RESULT';
 
-const StudySession: React.FC<StudySessionProps> = ({ cards, onExit, language }) => {
+const StudySession: React.FC<StudySessionProps> = ({ cards, onExit, language, onToggleMistake }) => {
   const [mode, setMode] = useState<Mode>('MENU');
 
   // Study State
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [studySide, setStudySide] = useState<CardSide>('FRONT');
+  const [isFlipped, setIsFlipped] = useState(false); // For 3D animation
 
   // Test State
   const [userAnswer, setUserAnswer] = useState('');
@@ -32,7 +33,7 @@ const StudySession: React.FC<StudySessionProps> = ({ cards, onExit, language }) 
 
   useEffect(() => {
     // Reset states when card changes
-    setStudySide('FRONT');
+    setIsFlipped(false);
     setTestState('INPUT');
     setUserAnswer('');
     setEvaluation(null);
@@ -74,27 +75,20 @@ const StudySession: React.FC<StudySessionProps> = ({ cards, onExit, language }) 
 
     // 2. Fallback: Use Device's Native Text-to-Speech (Spanish/Chinese/Offline)
     if ('speechSynthesis' in window) {
-      // Cancel previous utterances
       window.speechSynthesis.cancel();
-
       const utterance = new SpeechSynthesisUtterance(currentCard.word);
-
-      // Map generic lang to specific Locale
       switch (language) {
         case 'es': utterance.lang = 'es-ES'; break;
         case 'zh': utterance.lang = 'zh-CN'; break;
         default: utterance.lang = 'en-US';
       }
-
-      utterance.rate = 0.9; // Slightly slower for better clarity
-
+      utterance.rate = 0.9;
       utterance.onstart = () => setIsPlayingAudio(true);
       utterance.onend = () => setIsPlayingAudio(false);
       utterance.onerror = (e) => {
         console.error("Speech synthesis error", e);
         setIsPlayingAudio(false);
       };
-
       window.speechSynthesis.speak(utterance);
     } else {
       alert("Audio not supported on this device.");
@@ -102,8 +96,8 @@ const StudySession: React.FC<StudySessionProps> = ({ cards, onExit, language }) 
   };
 
   // --- STUDY MODE LOGIC ---
-  const toggleStudySide = () => {
-    setStudySide(prev => prev === 'FRONT' ? 'BACK' : 'FRONT');
+  const toggleFlip = () => {
+    setIsFlipped(prev => !prev);
   };
 
   // --- TEST MODE LOGIC ---
@@ -181,7 +175,7 @@ const StudySession: React.FC<StudySessionProps> = ({ cards, onExit, language }) 
   return (
     <div className="fixed inset-0 z-50 bg-gray-50 flex flex-col h-screen w-screen font-sans text-slate-900">
       {/* HEADER */}
-      <div className="bg-white border-b border-gray-200 px-6 py-4 flex justify-between items-center shadow-sm shrink-0">
+      <div className="bg-white border-b border-gray-200 px-6 py-4 flex justify-between items-center shadow-sm shrink-0 z-10">
         <div className="flex items-center gap-4">
           <button onClick={() => setMode('MENU')} className="text-slate-400 hover:text-slate-900">
             <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
@@ -204,67 +198,93 @@ const StudySession: React.FC<StudySessionProps> = ({ cards, onExit, language }) 
       </div>
 
       {/* MAIN CONTENT AREA */}
-      <div className="flex-1 flex flex-col items-center justify-center p-6 overflow-y-auto">
-        <div className="w-full max-w-2xl">
+      <div className="flex-1 flex flex-col items-center justify-center p-6 overflow-hidden relative perspective-1000" style={{ perspective: '1000px' }}>
+        <div className="w-full max-w-xl h-[450px] relative">
 
-          {/* STUDY MODE CARD */}
+          {/* STUDY MODE CARD (WITH 3D FLIP) */}
           {mode === 'STUDY' && (
             <div
-              onClick={toggleStudySide}
-              className="bg-white rounded-2xl shadow-xl border border-gray-200 min-h-[400px] flex flex-col items-center justify-center text-center p-10 cursor-pointer hover:border-indigo-400 transition-all select-none relative"
+              onClick={toggleFlip}
+              className="w-full h-full relative cursor-pointer"
+              style={{
+                transformStyle: 'preserve-3d',
+                transition: 'transform 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
+                transform: isFlipped ? 'rotateY(180deg)' : 'rotateY(0deg)'
+              }}
             >
-              {studySide === 'FRONT' ? (
-                <div className="animate-in fade-in zoom-in-95 duration-300 flex flex-col items-center">
-                  <h1 className="text-5xl md:text-7xl font-black text-slate-900 mb-4 tracking-tighter break-all">{currentCard.word}</h1>
+              {/* FRONT SIDE */}
+              <div
+                className="absolute inset-0 bg-white rounded-3xl shadow-2xl border-2 border-slate-100 flex flex-col items-center justify-center p-8 backface-hidden"
+                style={{ backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden' }}
+              >
+                {currentCard.isMistake && (
+                  <div className="absolute top-6 right-6 bg-red-100 text-red-600 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest">
+                    Mistake
+                  </div>
+                )}
+
+                <div className="flex-1 flex flex-col items-center justify-center w-full">
+                  <h1 className="text-5xl md:text-6xl font-black text-slate-900 mb-6 text-center break-words leading-tight">{currentCard.word}</h1>
 
                   {/* IPA & Audio Section */}
-                  <div className="flex items-center gap-3 mb-6">
-                    <p className="text-xl md:text-2xl font-ipa text-slate-400">
+                  <div className="flex items-center gap-4 mb-8 bg-slate-50 px-6 py-3 rounded-full">
+                    <p className="text-xl font-ipa text-slate-500">
                       {currentCard.ipa ? (language === 'zh' ? `[${currentCard.ipa}]` : currentCard.ipa) : ''}
                     </p>
-                    {/* Always show speaker if we can play audio (either MP3 or TTS) */}
                     <button
                       onClick={playAudio}
-                      className={`p-2 rounded-full transition-all ${isPlayingAudio ? 'bg-indigo-100 text-indigo-600 scale-110' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}
+                      className={`p-2 rounded-full transition-all ${isPlayingAudio ? 'bg-indigo-100 text-indigo-600 scale-110' : 'text-slate-400 hover:text-indigo-600'}`}
                     >
-                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" /></svg>
+                      <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" /></svg>
                     </button>
                   </div>
+                </div>
 
-                  <p className="mt-8 text-[10px] font-black uppercase tracking-[0.2em] text-indigo-500">Tap to Flip</p>
+                <div className="mt-auto">
+                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-indigo-400">Tap to Flip</p>
                 </div>
-              ) : (
-                <div className="animate-in fade-in zoom-in-95 duration-300 w-full">
-                  <h2 className="text-3xl md:text-4xl font-black text-indigo-600 mb-6">{currentCard.translation}</h2>
-                  <div className="w-16 h-1 bg-gray-100 mx-auto mb-6 rounded-full" />
-                  <p className="text-lg text-slate-700 leading-relaxed mb-8 font-medium font-ipa">{currentCard.definition}</p>
-                  <div className="bg-slate-50 p-6 rounded-xl border border-slate-100">
-                    <p className="text-lg italic text-slate-500 font-ipa">"{currentCard.example}"</p>
+              </div>
+
+              {/* BACK SIDE */}
+              <div
+                className="absolute inset-0 bg-slate-900 rounded-3xl shadow-2xl flex flex-col items-center justify-center p-8 backface-hidden"
+                style={{
+                  backfaceVisibility: 'hidden',
+                  WebkitBackfaceVisibility: 'hidden',
+                  transform: 'rotateY(180deg)'
+                }}
+              >
+                <div className="flex-1 flex flex-col items-center justify-center w-full text-center">
+                  <h2 className="text-3xl md:text-4xl font-black text-indigo-400 mb-6">{currentCard.translation}</h2>
+                  <div className="w-12 h-1 bg-slate-700 rounded-full mb-6"></div>
+                  <p className="text-lg text-slate-300 leading-relaxed mb-8 font-medium max-w-sm">{currentCard.definition}</p>
+                  <div className="bg-slate-800 p-4 rounded-xl border border-slate-700 w-full max-w-sm">
+                    <p className="text-base italic text-slate-400">"{currentCard.example}"</p>
                   </div>
-                  <p className="mt-8 text-[10px] font-black uppercase tracking-[0.2em] text-indigo-300">Tap to Flip Back</p>
                 </div>
-              )}
+                <div className="mt-auto">
+                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">Tap to Flip Back</p>
+                </div>
+              </div>
             </div>
           )}
 
-          {/* TEST MODE CARD */}
+          {/* TEST MODES (No Flip) */}
           {(mode === 'TEST_TRANSLATION' || mode === 'TEST_SENTENCE') && (
-            <div className="bg-white rounded-2xl shadow-xl border border-gray-200 min-h-[400px] flex flex-col p-8 md:p-12">
-
-              <div className="text-center mb-8">
+            <div className="bg-white rounded-2xl shadow-xl border border-gray-200 h-full flex flex-col p-8 md:p-10 relative overflow-y-auto">
+              {/* Same test UI as before, just kept clean */}
+              <div className="text-center mb-6">
                 <span className="inline-block px-3 py-1 bg-slate-100 text-slate-500 rounded text-[10px] font-black uppercase tracking-widest mb-4">
                   {mode === 'TEST_TRANSLATION' ? 'Translate to Uzbek' : 'Write a sentence'}
                 </span>
-                <h1 className="text-4xl md:text-5xl font-black text-slate-900 mb-2 font-ipa">{currentCard.word}</h1>
-                <p className="text-lg font-ipa text-slate-400">{currentCard.ipa}</p>
+                <h1 className="text-3xl font-black text-slate-900 mb-2">{currentCard.word}</h1>
               </div>
 
               {testState !== 'RESULT' ? (
-                <div className="w-full max-w-lg mx-auto flex-1 flex flex-col">
+                <div className="flex-1 flex flex-col">
                   <textarea
-                    className="w-full p-4 text-lg border-2 border-slate-200 rounded-xl focus:border-indigo-600 focus:ring-0 outline-none transition-all resize-none mb-4"
-                    rows={3}
-                    placeholder={mode === 'TEST_TRANSLATION' ? "Type translation in Uzbek..." : `Write a ${language === 'en' ? 'English' : language === 'es' ? 'Spanish' : 'Chinese'} sentence...`}
+                    className="w-full p-4 border-2 border-slate-200 rounded-xl focus:border-indigo-600 focus:ring-0 outline-none transition-all resize-none mb-4 flex-1 text-lg"
+                    placeholder={mode === 'TEST_TRANSLATION' ? "Type translation..." : "Write a sentence..."}
                     value={userAnswer}
                     onChange={(e) => setUserAnswer(e.target.value)}
                     disabled={testState === 'EVALUATING'}
@@ -272,49 +292,22 @@ const StudySession: React.FC<StudySessionProps> = ({ cards, onExit, language }) 
                   <button
                     onClick={submitAnswer}
                     disabled={!userAnswer.trim() || testState === 'EVALUATING'}
-                    className={`w-full py-4 rounded-xl font-black text-sm uppercase tracking-widest transition-all ${testState === 'EVALUATING'
-                        ? 'bg-slate-100 text-slate-400'
-                        : 'bg-indigo-600 text-white hover:bg-indigo-500 shadow-lg shadow-indigo-200'
-                      }`}
+                    className={`w-full py-4 rounded-xl font-black text-xs uppercase tracking-widest ${testState === 'EVALUATING' ? 'bg-slate-100 text-slate-400' : 'bg-indigo-600 text-white hover:bg-indigo-500'}`}
                   >
-                    {testState === 'EVALUATING' ? 'AI Analyzing...' : 'Check Answer'}
+                    {testState === 'EVALUATING' ? 'Behavor...' : 'Check Answer'}
                   </button>
                 </div>
               ) : (
-                <div className="w-full max-w-lg mx-auto animate-in slide-in-from-bottom-4 fade-in duration-500">
-                  <div className={`p-6 rounded-xl border mb-6 ${evaluation?.correct ? 'bg-emerald-50 border-emerald-200' : 'bg-rose-50 border-rose-200'}`}>
-                    <div className="flex items-center gap-3 mb-2">
-                      <div className={`p-2 rounded-full ${evaluation?.correct ? 'bg-emerald-100 text-emerald-600' : 'bg-rose-100 text-rose-600'}`}>
-                        {evaluation?.correct ? (
-                          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
-                        ) : (
-                          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M6 18L18 6M6 6l12 12" /></svg>
-                        )}
-                      </div>
-                      <h3 className={`text-lg font-black ${evaluation?.correct ? 'text-emerald-900' : 'text-rose-900'}`}>
-                        {evaluation?.correct ? 'Excellent!' : 'Needs Improvement'}
-                      </h3>
-                    </div>
-                    <p className={`text-sm leading-relaxed ${evaluation?.correct ? 'text-emerald-800' : 'text-rose-800'}`}>
-                      {evaluation?.feedback}
-                    </p>
+                <div className="flex-1 flex flex-col animate-in fade-in">
+                  <div className={`p-4 rounded-xl border mb-4 flex-1 ${evaluation?.correct ? 'bg-emerald-50 border-emerald-200' : 'bg-rose-50 border-rose-200'}`}>
+                    <h3 className={`font-black mb-2 ${evaluation?.correct ? 'text-emerald-700' : 'text-rose-700'}`}>{evaluation?.correct ? 'Correct!' : 'Incorrect'}</h3>
+                    <p className="text-sm text-slate-700">{evaluation?.feedback}</p>
                   </div>
-
-                  {/* Reference Answer Display */}
-                  <div className="mb-8 p-4 bg-slate-50 rounded-lg border border-slate-100">
-                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Correct Meaning</p>
-                    <p className="text-slate-800 font-medium">{currentCard.translation}</p>
-                    {mode === 'TEST_SENTENCE' && (
-                      <p className="text-sm text-slate-500 italic mt-2 font-ipa">Ex: "{currentCard.example}"</p>
-                    )}
+                  <div className="bg-slate-50 p-3 rounded mb-4">
+                    <p className="text-xs font-bold text-slate-400 uppercase">Answer</p>
+                    <p className="font-medium text-slate-800">{currentCard.translation}</p>
                   </div>
-
-                  <button
-                    onClick={handleNext}
-                    className="w-full py-4 bg-slate-900 text-white rounded-xl font-black text-sm uppercase tracking-widest hover:bg-slate-800 transition-all shadow-lg"
-                  >
-                    {currentIndex < cards.length - 1 ? 'Next Question' : 'Finish Test'}
-                  </button>
+                  <button onClick={handleNext} className="w-full py-4 bg-slate-900 text-white rounded-xl font-black text-xs uppercase tracking-widest">Next</button>
                 </div>
               )}
             </div>
@@ -323,30 +316,52 @@ const StudySession: React.FC<StudySessionProps> = ({ cards, onExit, language }) 
         </div>
       </div>
 
-      {/* FOOTER CONTROLS (Only for Study Mode) */}
+      {/* FOOTER CONTROLS */}
       {mode === 'STUDY' && (
-        <div className="bg-white border-t border-gray-200 p-6 shrink-0">
-          <div className="max-w-2xl mx-auto flex justify-between gap-4">
+        <div className="bg-white border-t border-gray-200 p-4 md:p-6 shrink-0 z-20">
+          <div className="max-w-xl mx-auto flex items-center gap-4">
+            {/* MISTAKE TOGGLE BUTTON */}
             <button
-              onClick={handlePrev}
-              disabled={currentIndex === 0}
-              className={`flex-1 py-4 rounded-xl font-black text-xs uppercase tracking-widest transition-all ${currentIndex === 0
-                  ? 'bg-gray-50 text-gray-300 cursor-not-allowed'
-                  : 'bg-white border border-gray-200 text-slate-900 hover:border-slate-900 hover:shadow-md'
+              onClick={(e) => {
+                e.stopPropagation();
+                onToggleMistake(currentCard.id);
+              }}
+              className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-all shadow-lg active:scale-95 ${currentCard.isMistake
+                  ? 'bg-emerald-100 text-emerald-600 hover:bg-emerald-200 border-2 border-emerald-300'
+                  : 'bg-rose-50 text-rose-400 hover:bg-rose-100 border-2 border-transparent hover:border-rose-200'
                 }`}
+              title={currentCard.isMistake ? "Mark as Mastered (Remove from Mistakes)" : "Mark as Mistake"}
             >
-              Previous
+              {currentCard.isMistake ? (
+                <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
+              ) : (
+                <span className="text-2xl font-black">?</span>
+              )}
             </button>
-            <button
-              onClick={handleNext}
-              disabled={currentIndex === cards.length - 1}
-              className={`flex-1 py-4 rounded-xl font-black text-xs uppercase tracking-widest transition-all ${currentIndex === cards.length - 1
+
+            {/* NAVIGATION */}
+            <div className="flex-1 flex gap-3">
+              <button
+                onClick={handlePrev}
+                disabled={currentIndex === 0}
+                className={`flex-1 py-4 rounded-xl font-black text-xs uppercase tracking-widest transition-all ${currentIndex === 0
                   ? 'bg-gray-50 text-gray-300 cursor-not-allowed'
-                  : 'bg-slate-900 text-white hover:bg-slate-800 shadow-lg shadow-slate-200'
-                }`}
-            >
-              Next
-            </button>
+                  : 'bg-white border-2 border-gray-100 text-slate-900 hover:border-slate-300'
+                  }`}
+              >
+                Prev
+              </button>
+              <button
+                onClick={handleNext}
+                disabled={currentIndex === cards.length - 1}
+                className={`flex-1 py-4 rounded-xl font-black text-xs uppercase tracking-widest transition-all ${currentIndex === cards.length - 1
+                  ? 'bg-gray-50 text-gray-300 cursor-not-allowed'
+                  : 'bg-slate-900 text-white hover:bg-slate-800 shadow-xl shadow-slate-200'
+                  }`}
+              >
+                Next
+              </button>
+            </div>
           </div>
         </div>
       )}

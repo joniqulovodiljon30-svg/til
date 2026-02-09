@@ -5,7 +5,7 @@ import { generatePDF } from '../services/pdfGenerator';
 import StudySession from './components/StudySession';
 import InstallBanner from './components/InstallBanner';
 import SecurityHandler from './components/SecurityHandler';
-import { useSecurity } from './hooks/useSecurity';
+import { useSecurity } from './hooks/useSecurity.ts';
 
 const STORAGE_KEY = 'vocab_pro_flashcards_v1';
 
@@ -386,8 +386,8 @@ const Dashboard: React.FC = () => {
                 onClick={handleGenerate}
                 disabled={isLoading || !input.trim()}
                 className={`h-32 px-6 rounded-lg font-black text-xs tracking-widest uppercase transition-all flex flex-col items-center justify-center gap-2 ${isLoading
-                    ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
-                    : 'bg-indigo-600 text-white hover:bg-indigo-500 shadow-md shadow-indigo-200'
+                  ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                  : 'bg-indigo-600 text-white hover:bg-indigo-500 shadow-md shadow-indigo-200'
                   }`}
               >
                 {isLoading ? (
@@ -512,7 +512,7 @@ const Dashboard: React.FC = () => {
 // --- APP ROOT COMPONENT ---
 // Separated to ensure hooks are always called in the same order.
 const App: React.FC = () => {
-  const { blocked } = useSecurity();
+  const { isBlocked } = useSecurity();
   const [currentPath] = useState(window.location.pathname);
 
   // If we are at /security, render handler (hooks inside SecurityHandler are consistent)
@@ -521,7 +521,7 @@ const App: React.FC = () => {
   }
 
   // If blocked, show 404
-  if (blocked) {
+  if (isBlocked) {
     return <Fake404 />;
   }
 

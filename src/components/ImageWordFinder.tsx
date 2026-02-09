@@ -207,8 +207,15 @@ const ImageWordFinder: React.FC<ImageWordFinderProps> = ({ onAddWords, onClose }
                                     ref={imageRef}
                                     src={image}
                                     alt="Uploaded content"
-                                    className="max-w-full h-auto object-contain block opacity-100" // Ensure image is visible
+                                    className="max-w-full h-auto object-contain block opacity-100"
                                     style={{ maxHeight: 'calc(90vh - 120px)' }}
+                                    onLoad={() => {
+                                        // Force scale update when image loads
+                                        if (imageRef.current) {
+                                            const currentScale = imageRef.current.clientWidth / imageRef.current.naturalWidth;
+                                            setScale(currentScale || 1);
+                                        }
+                                    }}
                                 />
 
                                 {/* OCR LOADING OVERLAY */}
@@ -228,9 +235,14 @@ const ImageWordFinder: React.FC<ImageWordFinderProps> = ({ onAddWords, onClose }
                                 )}
 
                                 {/* WORD OVERLAYS */}
-                                {/* Only verify !isProcessing to avoid flickering overlay while loading */}
                                 {!isProcessing && detectedWords.map((word) => {
                                     const isSelected = selectedWords.includes(word.text.trim());
+
+                                    // Calculate dimensions based on scale
+                                    const left = word.bbox.x0 * scale;
+                                    const top = word.bbox.y0 * scale;
+                                    const width = (word.bbox.x1 - word.bbox.x0) * scale;
+                                    const height = (word.bbox.y1 - word.bbox.y0) * scale;
 
                                     return (
                                         <div
@@ -239,17 +251,17 @@ const ImageWordFinder: React.FC<ImageWordFinderProps> = ({ onAddWords, onClose }
                                                 e.stopPropagation();
                                                 toggleWord(word.text);
                                             }}
-                                            className={`absolute cursor-pointer transition-all duration-150 border-b-2
-                        ${isSelected
-                                                    ? 'bg-indigo-500/40 border-indigo-400'
-                                                    : 'hover:bg-yellow-300/30 border-transparent hover:border-yellow-400'
+                                            className={`absolute cursor-pointer transition-all duration-150 rounded-sm
+                                                ${isSelected
+                                                    ? 'bg-indigo-500/50 border-2 border-indigo-400 z-10'
+                                                    : 'bg-yellow-300/20 hover:bg-yellow-400/40 border border-yellow-400/30 hover:border-yellow-500'
                                                 }
-                      `}
+                                            `}
                                             style={{
-                                                left: `${word.bbox.x0 * scale}px`,
-                                                top: `${word.bbox.y0 * scale}px`,
-                                                width: `${(word.bbox.x1 - word.bbox.x0) * scale}px`,
-                                                height: `${(word.bbox.y1 - word.bbox.y0) * scale}px`,
+                                                left: `${left}px`,
+                                                top: `${top}px`,
+                                                width: `${width}px`,
+                                                height: `${height}px`,
                                             }}
                                             title={word.text}
                                         />

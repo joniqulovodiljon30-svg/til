@@ -540,6 +540,33 @@ const Dashboard: React.FC = () => {
             )}
           </section>
 
+
+          {/* AUTHOR FOOTER */}
+          <footer className="mt-20 mb-8 text-center flex flex-col items-center animate-in fade-in slide-in-from-bottom-4 duration-700 delay-300">
+            <a
+              href="https://t.me/MR_Odilxon"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="group flex flex-col items-center gap-2 hover:scale-105 transition-transform"
+            >
+              <div className="bg-white p-1 rounded-full border border-slate-100 shadow-sm group-hover:shadow-md transition-shadow">
+                <img
+                  src="https://upload.wikimedia.org/wikipedia/commons/8/82/Telegram_logo.svg"
+                  alt="Telegram"
+                  className="w-8 h-8"
+                />
+              </div>
+              <div className="flex flex-col items-center">
+                <span className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400 group-hover:text-indigo-500 transition-colors">
+                  Loyiha Muallifi
+                </span>
+                <span className="text-sm font-bold text-slate-700 group-hover:text-indigo-600 transition-colors font-mono">
+                  @MR_Odilxon
+                </span>
+              </div>
+            </a>
+          </footer>
+
         </main>
 
         {/* Sticky Print Action Bar */}

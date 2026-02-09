@@ -67,13 +67,13 @@ const InstallBanner: React.FC<InstallBannerProps> = ({ onVisibilityChange }) => 
         <div className="flex items-center gap-3">
           {/* Logo Container */}
           <div className="w-10 h-10 bg-black rounded-full overflow-hidden border border-gray-600 shrink-0">
-             <img src="/logo.svg" alt="Flash-XB7 Logo" className="w-full h-full object-cover" />
+             <img src="/logo.png" alt="Vocab-AI-PRO Logo" className="w-full h-full object-cover" />
           </div>
           
           {/* Text Info */}
           <div className="flex flex-col">
-            <span className="font-bold text-sm tracking-wide">Flash-XB7</span>
-            <span className="text-[10px] text-gray-400">flash-xb7.app</span>
+            <span className="font-bold text-sm tracking-wide">vocab-ai-pro</span>
+            <span className="text-[10px] text-gray-400">vocab-ai-pro.app</span>
           </div>
         </div>
 

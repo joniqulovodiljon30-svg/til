@@ -557,9 +557,6 @@ const Dashboard: React.FC = () => {
                 />
               </div>
               <div className="flex flex-col items-center">
-                <span className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400 group-hover:text-indigo-500 transition-colors">
-                  Loyiha Muallifi
-                </span>
                 <span className="text-sm font-bold text-slate-700 group-hover:text-indigo-600 transition-colors font-mono">
                   @MR_Odilxon
                 </span>

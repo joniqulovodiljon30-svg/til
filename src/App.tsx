@@ -324,9 +324,12 @@ const Dashboard: React.FC = () => {
         {/* Header */}
         <header className="bg-slate-900 text-white py-6 px-4">
           <div className="max-w-4xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
-            <div className="text-center md:text-left">
-              <img src="/logo.png" alt="Flash-XB7" className="h-12 w-auto object-contain" />
-              {/* <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-slate-400 mt-1">Multi-Lingual Vocabulary</p> */}
+            <div className="text-center md:text-left flex items-center gap-3">
+              <img src="/logo.png" alt="Flash-XB7" className="h-14 w-auto object-contain rounded-full border-2 border-slate-700" />
+              <div>
+                <h1 className="text-2xl font-black tracking-tighter loading-none">Vocab AI Pro</h1>
+                <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-emerald-400">Multi-Lingual Vocabulary</p>
+              </div>
             </div>
 
             {/* LANGUAGE SWITCHER */}

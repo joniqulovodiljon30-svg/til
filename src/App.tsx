@@ -5,7 +5,7 @@ import { generatePDF } from '../services/pdfGenerator';
 import StudySession from './components/StudySession';
 import InstallBanner from './components/InstallBanner';
 import SecurityHandler from './components/SecurityHandler';
-import { useSecurity } from './hooks/useSecurity.ts';
+import { useSecurity } from './hooks/useSecurity';
 
 const STORAGE_KEY = 'vocab_pro_flashcards_v1';
 

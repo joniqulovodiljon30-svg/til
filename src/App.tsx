@@ -325,8 +325,8 @@ const Dashboard: React.FC = () => {
         <header className="bg-slate-900 text-white py-6 px-4">
           <div className="max-w-4xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
             <div className="text-center md:text-left">
-              <h1 className="text-xl font-black tracking-tighter">FLASH-XB7</h1>
-              <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-slate-400 mt-1">Multi-Lingual Vocabulary</p>
+              <img src="/logo.png" alt="Flash-XB7" className="h-12 w-auto object-contain" />
+              {/* <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-slate-400 mt-1">Multi-Lingual Vocabulary</p> */}
             </div>
 
             {/* LANGUAGE SWITCHER */}

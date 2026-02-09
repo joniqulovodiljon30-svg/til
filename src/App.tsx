@@ -79,24 +79,6 @@ const Dashboard: React.FC = () => {
   }, [notification]);
 
   // Group cards by Batch ID
-  const batches = useMemo(() => {
-    const groups: Record<string, Flashcard[]> = {};
-    flashcards.forEach(card => {
-      if (!groups[card.batchId]) groups[card.batchId] = [];
-      groups[card.batchId].push(card);
-    });
-    // Sort keys (dates) descending
-    return Object.entries(groups).sort((a, b) => b[0].localeCompare(a[0]));
-  }, [flashcards]);
-
-  // Filter batches by CURRENT selected language
-  const filteredBatches = useMemo(() => {
-    return batches.filter(([_, cards]) => {
-      // Assume batch belongs to the language of its first card
-      return cards.length > 0 && cards[0].language === targetLanguage;
-    });
-  }, [batches, targetLanguage]);
-
   const toggleBatchSelection = (batchId: string) => {
     const newSet = new Set(selectedBatchIds);
     if (newSet.has(batchId)) {
@@ -106,6 +88,55 @@ const Dashboard: React.FC = () => {
     }
     setSelectedBatchIds(newSet);
   };
+
+  // Toggle Mistake Status
+  const handleToggleMistake = (cardId: string) => {
+    setFlashcards(prev => prev.map(card => {
+      if (card.id === cardId) {
+        return { ...card, isMistake: !card.isMistake };
+      }
+      return card;
+    }));
+  };
+
+  // Group cards by Batch ID
+  const batches = useMemo(() => {
+    const groups: Record<string, Flashcard[]> = {};
+
+    // Add "Mistakes" collection first if exists
+    const mistakeCards = flashcards.filter(c => c.isMistake);
+    if (mistakeCards.length > 0) {
+      groups['Mistakes'] = mistakeCards;
+    }
+
+    flashcards.forEach(card => {
+      if (!groups[card.batchId]) groups[card.batchId] = [];
+      groups[card.batchId].push(card);
+    });
+    // Sort keys (dates) descending, but keep Mistakes at top
+    return Object.entries(groups).sort((a, b) => {
+      if (a[0] === 'Mistakes') return -1;
+      if (b[0] === 'Mistakes') return 1;
+      return b[0].localeCompare(a[0]);
+    });
+  }, [flashcards]);
+
+  // Filter batches by CURRENT selected language
+  const filteredBatches = useMemo(() => {
+    return batches
+      .map(([id, cards]) => {
+        if (id === 'Mistakes') {
+          // Filter mistakes by language
+          const langMistakes = cards.filter(c => c.language === targetLanguage);
+          return [id, langMistakes] as [string, Flashcard[]];
+        }
+        return [id, cards] as [string, Flashcard[]];
+      })
+      .filter(([id, cards]) => {
+        if (id === 'Mistakes') return cards.length > 0;
+        return cards.length > 0 && cards[0].language === targetLanguage;
+      });
+  }, [batches, targetLanguage]);
 
   const handleDownloadPdf = async () => {
     if (selectedBatchIds.size === 0) return;
@@ -300,6 +331,7 @@ const Dashboard: React.FC = () => {
             cards={activeStudyCards}
             onExit={() => setStudyBatchId(null)}
             language={studyBatchLang}
+            onToggleMistake={handleToggleMistake}
           />
         </div>
       )}

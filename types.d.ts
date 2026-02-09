@@ -1,8 +1,6 @@
-declare module 'react';
-declare module 'react/jsx-runtime';
+/// <reference types="vite/client" />
 
 declare module 'react-dom/client';
-declare module 'tesseract.js';
 
 declare module 'uuid' {
     export function v4(): string;
@@ -38,8 +36,45 @@ declare module 'openai' {
     }
 }
 
-
+declare module 'jspdf' {
+    export class jsPDF {
+        constructor(options?: any);
+        setFont(font: string, style?: string): void;
+        setFontSize(size: number): void;
+        text(text: string, x: number, y: number, options?: any): void;
+        addPage(): void;
+        save(filename: string): void;
+        internal: {
+            pageSize: {
+                getWidth(): number;
+                getHeight(): number;
+            };
+        };
+    }
+}
 
 declare module '@supabase/supabase-js' {
     export function createClient(url: string, key: string): any;
+}
+
+declare module 'tesseract.js' {
+    export namespace Tesseract {
+        interface Bbox {
+            x0: number;
+            y0: number;
+            x1: number;
+            y1: number;
+        }
+    }
+    const Tesseract: {
+        recognize(image: string, langs?: string, options?: any): Promise<{
+            data: {
+                words: {
+                    text: string;
+                    bbox: Tesseract.Bbox;
+                }[];
+            };
+        }>;
+    };
+    export default Tesseract;
 }

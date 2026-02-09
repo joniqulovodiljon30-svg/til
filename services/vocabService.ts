@@ -1,6 +1,6 @@
 
 import OpenAI from "openai";
-import pinyin from "pinyin-pro";
+import { pinyin } from "pinyin-pro";
 import { WordExtractionResult, SupportedLanguage } from "../types";
 
 // --- CONFIGURATION ---
@@ -138,7 +138,7 @@ export const extractWords = async (wordList: string[], lang: SupportedLanguage):
       else if (lang === 'zh') {
         // Pinyin Generation (Overwrite AI IPA because library is more standard for Pinyin)
         try {
-          finalIpa = pinyin.pinyin(item.word, { toneType: 'symbol' });
+          finalIpa = pinyin(item.word, { toneType: 'symbol' });
         } catch (e) {
           finalIpa = "";
         }

@@ -1,7 +1,12 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-// @ts-ignore
-import Tesseract from 'tesseract.js';
+
+// Define Tesseract on window since we load it via CDN
+declare global {
+    interface Window {
+        Tesseract: any;
+    }
+}
 
 interface ImageWordFinderProps {
     onAddWords: (words: string[]) => void;
@@ -57,7 +62,8 @@ const ImageWordFinder: React.FC<ImageWordFinderProps> = ({ onAddWords, onClose }
         setStatus('Initializing OCR engine...');
 
         try {
-            const result = await Tesseract.recognize(
+            // Use window.Tesseract from CDN
+            const result = await window.Tesseract.recognize(
                 imgSrc,
                 'eng+spa+chi_sim', // Support English, Spanish, Chinese Simplified
                 {

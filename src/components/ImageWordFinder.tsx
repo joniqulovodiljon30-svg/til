@@ -105,7 +105,7 @@ const ImageWordFinder: React.FC<ImageWordFinderProps> = ({ onAddWords, onClose }
                 {
                     workerPath: 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/worker.min.js',
                     corePath: 'https://cdn.jsdelivr.net/npm/tesseract.js-core@5/tesseract-core.wasm.js',
-                    logger: m => {
+                    logger: (m: any) => {
                         if (m.status === 'recognizing text') {
                             setProgress(Math.round(m.progress * 100));
                             setStatus(`Recognizing text... ${Math.round(m.progress * 100)}%`);
@@ -116,7 +116,7 @@ const ImageWordFinder: React.FC<ImageWordFinderProps> = ({ onAddWords, onClose }
                 }
             );
 
-            const words: DetectedWord[] = result.data.words.map((w, idx) => ({
+            const words: DetectedWord[] = result.data.words.map((w: any, idx: number) => ({
                 text: w.text,
                 bbox: w.bbox,
                 id: `word-${idx}-${Date.now()}`
@@ -172,11 +172,6 @@ const ImageWordFinder: React.FC<ImageWordFinderProps> = ({ onAddWords, onClose }
 
     useEffect(() => {
         if (imageRef.current && detectedWords.length > 0) {
-            // Just a simple effect to trigger re-render if needed, 
-            // but mostly CSS relative positioning handles the overlay if we set image width to 100%
-            // The tricky part is Tesseract bbox is based on ORIGINAL image size.
-            // We need to calculate scale factor: displayedWidth / naturalWidth
-
             const updateScale = () => {
                 if (imageRef.current) {
                     const currentScale = imageRef.current.clientWidth / imageRef.current.naturalWidth;
@@ -193,31 +188,31 @@ const ImageWordFinder: React.FC<ImageWordFinderProps> = ({ onAddWords, onClose }
     }, [image, detectedWords]);
 
     return (
-        <div className="fixed inset-0 z-[60] bg-slate-900/95 backdrop-blur-md flex items-center justify-center p-4">
-            <div className="bg-white rounded-2xl w-full max-w-6xl h-[90vh] flex flex-col md:flex-row shadow-2xl overflow-hidden relative animate-in zoom-in-95 duration-200">
+        <div className="fixed inset-0 z-[60] bg-slate-900/95 backdrop-blur-md flex items-center justify-center p-0 md:p-4">
+            <div className="bg-white rounded-none md:rounded-2xl w-full max-w-6xl h-full md:h-[90vh] flex flex-col md:flex-row shadow-2xl overflow-hidden relative animate-in zoom-in-95 duration-200">
 
                 {/* CLOSE BUTTON */}
                 <button
                     onClick={onClose}
-                    className="absolute top-4 right-4 z-50 p-2 bg-slate-100 hover:bg-red-50 text-slate-500 hover:text-red-500 rounded-full transition-colors"
+                    className="absolute top-2 right-2 md:top-4 md:right-4 z-50 p-2 bg-slate-100 hover:bg-red-50 text-slate-500 hover:text-red-500 rounded-full transition-colors shadow-md"
                 >
-                    <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                    <svg className="w-5 h-5 md:w-6 md:h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
                 </button>
 
-                {/* LEFT PANEL: IMAGE & INTERACTION */}
-                <div className="flex-1 bg-slate-100 flex flex-col relative overflow-hidden">
+                {/* LEFT PANEL: IMAGE & INTERACTION (Mobile: Top 45%, Desktop: Full left) */}
+                <div className="h-[45%] md:h-auto md:flex-1 bg-slate-100 flex flex-col relative overflow-hidden border-b md:border-b-0 md:border-r border-slate-200">
 
                     {/* HEADER / UPLOAD */}
-                    <div className="p-4 bg-white border-b border-slate-200 flex justify-between items-center z-10">
-                        <h2 className="text-sm font-black uppercase tracking-widest text-slate-700 flex items-center gap-2">
-                            <span className="text-xl">📸</span> OCR Scanner
+                    <div className="p-3 md:p-4 bg-white border-b border-slate-200 flex justify-between items-center z-10 shrink-0">
+                        <h2 className="text-xs md:text-sm font-black uppercase tracking-widest text-slate-700 flex items-center gap-2">
+                            <span className="text-lg md:text-xl">📸</span> <span className="hidden sm:inline">OCR Scanner</span>
                         </h2>
-                        <div className="flex gap-2">
+                        <div className="flex gap-2 mr-8 md:mr-0">
                             <button
                                 onClick={() => fileInputRef.current?.click()}
-                                className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition-all"
+                                className="bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1.5 md:px-4 md:py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition-all"
                             >
-                                {image ? 'Change Image' : 'Upload Image'}
+                                {image ? 'Change' : 'Upload'}
                             </button>
                             <input
                                 ref={fileInputRef}
@@ -230,25 +225,24 @@ const ImageWordFinder: React.FC<ImageWordFinderProps> = ({ onAddWords, onClose }
                     </div>
 
                     {/* MAIN CANVAS AREA */}
-                    <div className="flex-1 overflow-auto p-8 flex items-center justify-center relative bg-grid-slate-200">
+                    <div className="flex-1 overflow-auto p-4 md:p-8 flex items-center justify-center relative bg-grid-slate-200">
                         {!image ? (
                             <div className="text-center text-slate-400 flex flex-col items-center">
-                                <div className="w-24 h-24 bg-slate-200 rounded-full flex items-center justify-center mb-4">
-                                    <svg className="w-10 h-10 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                                <div className="w-16 h-16 md:w-24 md:h-24 bg-slate-200 rounded-full flex items-center justify-center mb-4">
+                                    <svg className="w-8 h-8 md:w-10 md:h-10 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
                                 </div>
-                                <p className="font-bold">Upload an image to start</p>
-                                <p className="text-xs mt-2 max-w-xs">Supports English, Spanish, Chinese text detection</p>
+                                <p className="font-bold text-sm md:text-base">Upload an image</p>
+                                <p className="text-[10px] md:text-xs mt-2 max-w-xs">Supports English, Spanish, Chinese</p>
                             </div>
                         ) : (
-                            <div className="relative inline-block shadow-2xl rounded-lg overflow-hidden group">
+                            <div className="relative inline-block shadow-lg rounded-lg overflow-hidden group">
                                 <img
                                     ref={imageRef}
                                     src={image}
                                     alt="Uploaded content"
                                     className="max-w-full h-auto object-contain block opacity-100"
-                                    style={{ maxHeight: 'calc(90vh - 120px)' }}
+                                    style={{ maxHeight: 'calc(90vh - 120px)' }} // Limit image height to fit
                                     onLoad={() => {
-                                        // Force scale update when image loads
                                         if (imageRef.current) {
                                             const currentScale = imageRef.current.clientWidth / imageRef.current.naturalWidth;
                                             setScale(currentScale || 1);
@@ -259,11 +253,11 @@ const ImageWordFinder: React.FC<ImageWordFinderProps> = ({ onAddWords, onClose }
                                 {/* OCR LOADING OVERLAY */}
                                 {isProcessing && (
                                     <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm flex flex-col items-center justify-center z-20 text-white">
-                                        <div className="w-12 h-12 border-4 border-white/30 border-t-white rounded-full animate-spin mb-4"></div>
-                                        <p className="font-black tracking-widest uppercase text-xs animate-pulse">{status}</p>
+                                        <div className="w-8 h-8 md:w-12 md:h-12 border-4 border-white/30 border-t-white rounded-full animate-spin mb-4"></div>
+                                        <p className="font-black tracking-widest uppercase text-[10px] md:text-xs animate-pulse text-center px-4">{status}</p>
 
                                         {/* PROGRESS BAR */}
-                                        <div className="w-48 h-1 bg-white/20 rounded-full mt-4 overflow-hidden">
+                                        <div className="w-32 md:w-48 h-1 bg-white/20 rounded-full mt-4 overflow-hidden">
                                             <div
                                                 className="h-full bg-emerald-400 transition-all duration-300"
                                                 style={{ width: `${progress}%` }}
@@ -276,7 +270,6 @@ const ImageWordFinder: React.FC<ImageWordFinderProps> = ({ onAddWords, onClose }
                                 {!isProcessing && detectedWords.map((word) => {
                                     const isSelected = selectedWords.includes(word.text.trim());
 
-                                    // Calculate dimensions based on scale
                                     const left = word.bbox.x0 * scale;
                                     const top = word.bbox.y0 * scale;
                                     const width = (word.bbox.x1 - word.bbox.x0) * scale;
@@ -310,17 +303,17 @@ const ImageWordFinder: React.FC<ImageWordFinderProps> = ({ onAddWords, onClose }
                     </div>
                 </div>
 
-                {/* RIGHT PANEL: SELECTED WORDS */}
-                <div className="w-full md:w-80 bg-white border-l border-slate-200 flex flex-col z-20">
-                    <div className="p-4 border-b border-slate-200 bg-slate-50 flex justify-between items-center">
+                {/* RIGHT PANEL: SELECTED WORDS (Mobile: Bottom 55%, Desktop: Right side) */}
+                <div className="h-[55%] md:h-auto w-full md:w-80 bg-white flex flex-col z-20 overflow-hidden">
+                    <div className="p-3 md:p-4 border-b border-slate-200 bg-slate-50 flex justify-between items-center shrink-0">
                         <div>
-                            <h3 className="text-xs font-black uppercase tracking-widest text-slate-900">Collected Words</h3>
+                            <h3 className="text-[10px] md:text-xs font-black uppercase tracking-widest text-slate-900">Collected Words</h3>
                             <p className="text-[10px] font-bold text-slate-400 mt-0.5">{selectedWords.length} items</p>
                         </div>
                         {selectedWords.length > 0 && (
                             <button
                                 onClick={copyAll}
-                                className="text-xs text-indigo-600 hover:text-indigo-800 font-bold"
+                                className="text-[10px] md:text-xs text-indigo-600 hover:text-indigo-800 font-bold uppercase tracking-wider bg-indigo-50 px-2 py-1 rounded"
                                 title="Copy all as list"
                             >
                                 Copy All
@@ -328,34 +321,27 @@ const ImageWordFinder: React.FC<ImageWordFinderProps> = ({ onAddWords, onClose }
                         )}
                     </div>
 
-                    <div className="flex-1 overflow-y-auto p-2 space-y-2">
+                    <div className="flex-1 overflow-y-auto p-2 space-y-2 bg-slate-50/50">
                         {selectedWords.length === 0 ? (
                             <div className="h-full flex flex-col items-center justify-center text-slate-300 p-8 text-center">
                                 <p className="text-sm font-bold">No words selected</p>
-                                <p className="text-xs mt-2">Click on highlights in the image to add words here.</p>
+                                <p className="text-xs mt-2">Click highlights on image</p>
                             </div>
                         ) : (
                             selectedWords.map((word, idx) => (
-                                <div key={idx} className="group bg-white border border-slate-100 rounded-lg p-3 hover:border-indigo-200 hover:shadow-sm transition-all flex justify-between items-center animate-in slide-in-from-left-2 fade-in duration-200">
+                                <div key={idx} className="group bg-white border border-slate-200 rounded-lg p-3 hover:border-indigo-300 hover:shadow-sm transition-all flex justify-between items-center animate-in slide-in-from-left-2 fade-in duration-200">
                                     <div className="flex items-center gap-3 overflow-hidden">
                                         <span className="text-[10px] font-bold text-slate-300 w-4">{idx + 1}.</span>
-                                        <span className="font-medium text-slate-700 truncate">{word}</span>
+                                        <span className="font-medium text-slate-700 truncate text-sm">{word}</span>
                                     </div>
 
-                                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                        <button
-                                            onClick={() => copyToClipboard(word)}
-                                            className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded"
-                                            title="Copy"
-                                        >
-                                            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" /></svg>
-                                        </button>
+                                    <div className="flex gap-1">
                                         <button
                                             onClick={() => removeWord(word)}
-                                            className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded"
+                                            className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded transition-colors"
                                             title="Remove"
                                         >
-                                            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
                                         </button>
                                     </div>
                                 </div>
@@ -363,13 +349,13 @@ const ImageWordFinder: React.FC<ImageWordFinderProps> = ({ onAddWords, onClose }
                         )}
                     </div>
 
-                    <div className="p-4 border-t border-slate-100 bg-slate-50">
+                    <div className="p-3 md:p-4 border-t border-slate-200 bg-white shrink-0">
                         <button
                             onClick={handleFinish}
                             disabled={selectedWords.length === 0}
                             className={`w-full py-3 rounded-lg font-black text-xs uppercase tracking-widest transition-all ${selectedWords.length > 0
                                 ? 'bg-indigo-600 text-white hover:bg-indigo-500 shadow-lg shadow-indigo-200'
-                                : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                                : 'bg-slate-100 text-slate-300 cursor-not-allowed'
                                 }`}
                         >
                             Add to List

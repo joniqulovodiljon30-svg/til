@@ -37,21 +37,57 @@ const ImageWordFinder: React.FC<ImageWordFinderProps> = ({ onAddWords, onClose }
     const imageRef = useRef<HTMLImageElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
-    // Handle Image Upload
-    const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (file) {
+    // Helper to resize image
+    const resizeImage = (file: File): Promise<string> => {
+        return new Promise((resolve) => {
             const reader = new FileReader();
-            reader.onload = (event) => {
-                if (event.target?.result) {
-                    setImage(event.target.result as string);
-                    setDetectedWords([]);
-                    setSelectedWords([]);
-                    // Auto-start OCR when image is loaded
-                    processImage(event.target.result as string);
-                }
+            reader.onload = (readerEvent) => {
+                const img = new Image();
+                img.onload = () => {
+                    // Maximum width for OCR (balance between speed and accuracy)
+                    const MAX_WIDTH = 1200;
+                    let width = img.width;
+                    let height = img.height;
+
+                    if (width > MAX_WIDTH) {
+                        height = Math.round((height * MAX_WIDTH) / width);
+                        width = MAX_WIDTH;
+                    }
+
+                    const canvas = document.createElement('canvas');
+                    canvas.width = width;
+                    canvas.height = height;
+                    const ctx = canvas.getContext('2d');
+                    if (ctx) {
+                        ctx.drawImage(img, 0, 0, width, height);
+                        // Convert to slightly compressed JPEG
+                        resolve(canvas.toDataURL('image/jpeg', 0.8));
+                    } else {
+                        resolve(readerEvent.target?.result as string);
+                    }
+                };
+                img.src = readerEvent.target?.result as string;
             };
             reader.readAsDataURL(file);
+        });
+    };
+
+    // Handle Image Upload
+    const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (file) {
+            try {
+                // Resize image first for performance
+                const optimizedImage = await resizeImage(file);
+
+                setImage(optimizedImage);
+                setDetectedWords([]);
+                setSelectedWords([]);
+                // Auto-start OCR
+                processImage(optimizedImage);
+            } catch (err) {
+                console.error("Error processing image:", err);
+            }
         }
     };
 
@@ -65,8 +101,10 @@ const ImageWordFinder: React.FC<ImageWordFinderProps> = ({ onAddWords, onClose }
             // Use window.Tesseract from CDN
             const result = await window.Tesseract.recognize(
                 imgSrc,
-                'eng+spa+chi_sim', // Support English, Spanish, Chinese Simplified
+                'eng', // Start with English only for speed and reliability
                 {
+                    workerPath: 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/worker.min.js',
+                    corePath: 'https://cdn.jsdelivr.net/npm/tesseract.js-core@5/tesseract-core.wasm.js',
                     logger: m => {
                         if (m.status === 'recognizing text') {
                             setProgress(Math.round(m.progress * 100));

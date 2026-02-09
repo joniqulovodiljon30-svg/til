@@ -6,6 +6,7 @@ import StudySession from './components/StudySession';
 import InstallBanner from './components/InstallBanner';
 import SecurityHandler from './components/SecurityHandler';
 import { useSecurity } from './hooks/useSecurity';
+import ImageWordFinder from './components/ImageWordFinder';
 
 const STORAGE_KEY = 'vocab_pro_flashcards_v1';
 
@@ -60,6 +61,9 @@ const Dashboard: React.FC = () => {
 
   // Notification State
   const [notification, setNotification] = useState<{ message: string, type: 'success' | 'error' } | null>(null);
+
+  // OCR Modal State
+  const [showOcrModal, setShowOcrModal] = useState(false);
 
   // Save to local storage
   useEffect(() => {
@@ -374,9 +378,17 @@ const Dashboard: React.FC = () => {
               </span>
             </div>
 
-            <label className="block text-[10px] font-black text-slate-400 uppercase mb-3 tracking-[0.15em]">
-              Add Words ({targetLanguage === 'en' ? 'English' : targetLanguage === 'es' ? 'Spanish' : 'Chinese/Hanzi'})
-            </label>
+            <div className="flex justify-between items-center mb-3">
+              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-[0.15em]">
+                Add Words ({targetLanguage === 'en' ? 'English' : targetLanguage === 'es' ? 'Spanish' : 'Chinese/Hanzi'})
+              </label>
+              <button
+                onClick={() => setShowOcrModal(true)}
+                className="text-[10px] font-bold uppercase tracking-wider text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1"
+              >
+                <span>📸</span> Find Words
+              </button>
+            </div>
             <div className="flex gap-4 items-start z-10 relative">
               <textarea
                 className="flex-1 p-4 border border-slate-200 rounded-lg focus:ring-1 focus:ring-slate-900 outline-none h-32 text-sm placeholder:text-slate-300 font-medium resize-none"
@@ -404,6 +416,19 @@ const Dashboard: React.FC = () => {
               </button>
             </div>
           </section>
+
+          {/* OCR MODAL */}
+          {showOcrModal && (
+            <ImageWordFinder
+              onClose={() => setShowOcrModal(false)}
+              onAddWords={(words) => {
+                const textToAdd = words.join('\n');
+                setInput(prev => prev ? prev + '\n' + textToAdd : textToAdd);
+                setShowOcrModal(false);
+                setNotification({ message: `${words.length} words added from image!`, type: 'success' });
+              }}
+            />
+          )}
 
           {/* Batches Grid with Filtered View */}
           <section>

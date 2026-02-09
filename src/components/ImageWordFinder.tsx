@@ -101,7 +101,7 @@ const ImageWordFinder: React.FC<ImageWordFinderProps> = ({ onAddWords, onClose }
             // Use window.Tesseract from CDN
             const result = await window.Tesseract.recognize(
                 imgSrc,
-                'eng', // Start with English only for speed and reliability
+                'eng+spa', // Added Spanish for better accuracy (especially for hyphenation and accents)
                 {
                     workerPath: 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/worker.min.js',
                     corePath: 'https://cdn.jsdelivr.net/npm/tesseract.js-core@5/tesseract-core.wasm.js',

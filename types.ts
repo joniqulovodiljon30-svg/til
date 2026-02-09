@@ -1,4 +1,3 @@
-
 export type SupportedLanguage = 'en' | 'es' | 'zh';
 
 export interface Flashcard {
@@ -12,6 +11,7 @@ export interface Flashcard {
   batchId: string;
   language: SupportedLanguage; // Used for PDF font selection and Audio generation
   createdAt: number;
+  isMistake?: boolean; // Track if the card is marked as a mistake
 }
 
 export interface WordExtractionResult {

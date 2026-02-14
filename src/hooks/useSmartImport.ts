@@ -55,122 +55,123 @@ export const useSmartImport = () => {
 
         try {
             const { entries, batchId, targetLanguage, processedCount } = state;
-            const totalEntries = Math.min(entries.length, 200000); // Strict 200,000 limit
+            const totalEntries = Math.min(entries.length, 200000);
+            const totalBatches = Math.ceil(totalEntries / CHAPTER_SIZE);
 
-            // 1. Core Processing Loop (Granular for UI Feedback)
-            let tempBatch = [];
+            // 1. Outer Loop: Iterate through Batches (Chunks of 50)
+            for (let batchIdx = Math.floor(processedCount / CHAPTER_SIZE); batchIdx < totalBatches; batchIdx++) {
+                const batchStart = batchIdx * CHAPTER_SIZE;
+                const batchEnd = Math.min(batchStart + CHAPTER_SIZE, totalEntries);
+                const batchItems = entries.slice(batchStart, batchEnd);
+                let currentBatchEntries = [];
 
-            for (let i = processedCount; i < totalEntries; i++) {
-                const entry = entries[i];
+                // 2. Inner Loop: Word-by-word UI updates
+                for (let wordIdxInBatch = 0; wordIdxInBatch < batchItems.length; wordIdxInBatch++) {
+                    const entry = batchItems[wordIdxInBatch];
+                    const globalIdx = batchStart + wordIdxInBatch;
 
-                // --- GRANULAR PROGRESS (The 'Matrix' Effect) ---
-                setProgress({
-                    percent: Math.round((i / totalEntries) * 100),
-                    status: `Translating: ${entry.front} (${i + 1}/${totalEntries})`,
-                    processed: i,
-                    total: totalEntries
-                });
+                    // --- DETAILED UI FEEDBACK ---
+                    setProgress({
+                        percent: Math.round((globalIdx / totalEntries) * 100),
+                        status: `Batch ${batchIdx + 1}/${totalBatches}: Translating '${entry.front}' (${wordIdxInBatch + 1}/50)`,
+                        processed: globalIdx,
+                        total: totalEntries
+                    });
 
-                let attempts = 0;
-                let wordSuccess = false;
+                    let attempts = 0;
+                    let wordSuccess = false;
 
-                while (!wordSuccess && attempts < 3) {
-                    try {
-                        // --- ENRICH DATA (AI Call) ---
-                        const results = await extractWords([entry.front], targetLanguage);
+                    while (!wordSuccess && attempts < 3) {
+                        try {
+                            const results = await extractWords([entry.front], targetLanguage);
 
-                        if (results && results.length > 0) {
-                            const enriched = results[0];
+                            if (results && results.length > 0) {
+                                const enriched = results[0];
 
-                            // Strip HTML and trim
-                            const cleanTranslation = (enriched.translation || 'N/A')
-                                .replace(/<[^>]*>?/gm, '')
-                                .trim();
+                                const cleanTranslation = (enriched.translation || 'N/A')
+                                    .replace(/<[^>]*>?/gm, '')
+                                    .trim();
 
-                            const cleanDefinition = (enriched.definition || '')
-                                .replace(/<[^>]*>?/gm, '')
-                                .trim();
+                                const cleanDefinition = (enriched.definition || '')
+                                    .replace(/<[^>]*>?/gm, '')
+                                    .trim();
 
-                            const cleanExample = (enriched.example || '')
-                                .replace(/<[^>]*>?/gm, '')
-                                .trim();
+                                const cleanExample = (enriched.example || '')
+                                    .replace(/<[^>]*>?/gm, '')
+                                    .trim();
 
-                            const backContent = cleanDefinition
-                                ? `${cleanTranslation}\n\n(${cleanDefinition})`
-                                : cleanTranslation;
+                                const backContent = cleanDefinition
+                                    ? `${cleanTranslation}\n\n(${cleanDefinition})`
+                                    : cleanTranslation;
 
-                            tempBatch.push({
-                                user_id: user.id,
-                                front: enriched.word || entry.front,
-                                back: backContent,
-                                ipa: enriched.ipa || '',
-                                transcription: enriched.ipa || '',
-                                definition: cleanDefinition,
-                                example: cleanExample,
-                                audio: enriched.audio || '',
-                                batch_id: batchId,
-                                category: targetLanguage,
-                                created_at: new Date().toISOString()
-                            });
-                        }
-
-                        wordSuccess = true;
-
-                    } catch (err: any) {
-                        attempts++;
-                        const isRetryable = err.status === 429 || err.status === 500 ||
-                            err.message?.includes('429') || err.message?.includes('500');
-
-                        if (isRetryable && attempts < 3) {
-                            console.warn(`⚠️ [Retry] ${entry.front} failed. Waiting 5s...`);
-                            await delay(RETRY_DELAY);
-                        } else {
-                            console.error(`❌ [Fatal Word Error] ${entry.front}:`, err);
-                            // Avoid stopping the whole import for individual AI failures
+                                currentBatchEntries.push({
+                                    user_id: user.id,
+                                    front: enriched.word || entry.front,
+                                    back: backContent,
+                                    ipa: enriched.ipa || '',
+                                    transcription: enriched.ipa || '',
+                                    definition: cleanDefinition,
+                                    example: cleanExample,
+                                    audio: enriched.audio || '',
+                                    batch_id: batchId,
+                                    category: targetLanguage,
+                                    created_at: new Date().toISOString()
+                                });
+                            }
                             wordSuccess = true;
-                        }
-                    }
-                }
 
-                // --- CONSTANT PACE DELAY ---
-                await delay(API_DELAY);
+                        } catch (err: any) {
+                            attempts++;
+                            const isRetryable = err.status === 429 || err.status === 500 ||
+                                err.message?.includes('429') || err.message?.includes('500');
 
-                // --- BATCH SAVE (Safety & Performance with UPSERT) ---
-                if (tempBatch.length >= CHAPTER_SIZE || i === totalEntries - 1) {
-                    if (tempBatch.length > 0) {
-                        console.log(`💾 Upserting batch of ${tempBatch.length} cards... (Progress: ${i + 1}/${totalEntries})`);
-
-                        const { error: upsertError } = await supabase
-                            .from('flashcards')
-                            .upsert(tempBatch, {
-                                onConflict: 'user_id, front, batch_id',
-                                ignoreDuplicates: true
-                            });
-
-                        if (upsertError) {
-                            if (upsertError.code === '23505') {
-                                console.warn('⚠️ [Duplicate Warning] Skipping duplicates in batch...');
-                                // Continue to next batch
+                            if (isRetryable && attempts < 3) {
+                                console.warn(`⚠️ [Retry] ${entry.front} failed. Waiting 5s...`);
+                                await delay(RETRY_DELAY);
                             } else {
-                                console.error('❌ [Database Error] Failed to upsert batch:', upsertError);
-                                throw upsertError;
+                                console.error(`❌ [Word Error] ${entry.front}:`, err);
+                                wordSuccess = true;
                             }
                         }
-
-                        tempBatch = []; // Clear for next batch
-                        saveQueueState({ ...state, processedCount: i + 1 });
                     }
+
+                    // --- PACING DELAY ---
+                    await delay(API_DELAY);
+                }
+
+                // 3. Batch Save (Safety & Performance with UPSERT)
+                if (currentBatchEntries.length > 0) {
+                    console.log(`💾 Upserting batch ${batchIdx + 1}/${totalBatches}...`);
+
+                    const { error: upsertError } = await supabase
+                        .from('flashcards')
+                        .upsert(currentBatchEntries, {
+                            onConflict: 'user_id, front, batch_id',
+                            ignoreDuplicates: true
+                            // ignoreDuplicates: true is key to skipping 23505
+                        });
+
+                    if (upsertError) {
+                        if (upsertError.code === '23505') {
+                            console.warn('⚠️ [Duplicate Warning] Skipping duplicates in batch...');
+                        } else {
+                            console.error('❌ [Database Error] Failed to upsert batch:', upsertError);
+                            throw upsertError;
+                        }
+                    }
+
+                    // Only update persistence after batch success
+                    saveQueueState({ ...state, processedCount: batchEnd });
                 }
             }
 
-            // 3. Final Completion
+            // 4. Final Completion
             console.log('✨ [Smart Import] SUCCESS: All items processed.');
             clearQueue();
             setImporting(false);
 
-            // Only show success notification AFTER last word is saved
             alert(`Muvaffaqiyatli yakunlandi! ${totalEntries} so'z qo'shildi.`);
-            window.location.reload(); // Refresh to see cards
+            window.location.reload();
 
         } catch (err: any) {
             console.error('❌ [Import Crash] FATAL ERROR:', err);

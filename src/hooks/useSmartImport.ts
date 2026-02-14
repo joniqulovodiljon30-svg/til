@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import { parsePDF } from '../utils/pdfParser';
-import { fetchWordData } from '../services/dictionaryService';
+import { extractWords } from '../../services/vocabService';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { SupportedLanguage } from '../../types';
@@ -90,7 +90,12 @@ export const useSmartImport = () => {
                         await delay(API_DELAY);
 
                         // --- ENRICH DATA (IPA, Translation, Definition) ---
-                        const enriched = await fetchWordData(entry.front, targetLanguage);
+                        const results = await extractWords([entry.front], targetLanguage);
+                        if (!results || results.length === 0) {
+                            console.warn(`⚠️ [Extraction Empty] Skipping: "${entry.front}"`);
+                            continue;
+                        }
+                        const enriched = results[0];
 
                         // --- CLEANUP JUNK ---
                         // Strip HTML and trim
@@ -122,8 +127,8 @@ export const useSmartImport = () => {
                             user_id: user.id,
                             front: entry.front,
                             back: backContent,
-                            ipa: enriched.transcription || entry.ipa || '', // Keep IPA
-                            transcription: enriched.transcription || entry.ipa || '', // Save IPA to transcription col too
+                            ipa: enriched.ipa || entry.ipa || '', // Keep IPA
+                            transcription: enriched.ipa || entry.ipa || '', // Save IPA to transcription col too
                             definition: cleanDefinition,
                             example: cleanExample,
                             audio: enriched.audio || '', // Pure audio URL

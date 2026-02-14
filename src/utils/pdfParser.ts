@@ -79,15 +79,17 @@ function extractWord(line: string): string {
     return line.substring(0, ipaStart).trim();
 }
 
+
+
 /**
  * Parse Cambridge Dictionary PDF
  */
 export async function parsePDF(arrayBuffer: ArrayBuffer): Promise<ParseResult> {
     const errors: string[] = [];
-    const entries: ParsedEntry[] = [];
+    let entries: ParsedEntry[] = [];
 
     try {
-        console.log('🔍 [PDF Parser] Starting extraction...');
+        console.log(`🔍 [PDF Parser] Starting extraction (Unlimited Target)...`);
 
         // Extract text
         const fullText = await extractTextFromPDF(arrayBuffer);
@@ -100,47 +102,76 @@ export async function parsePDF(arrayBuffer: ArrayBuffer): Promise<ParseResult> {
 
         console.log(`📝 [PDF Parser] Processing ${contentLines.length} lines`);
 
-        let i = 0;
+        // CRITICAL FIX: Combine all text into one string (PDF squashes into massive lines)
+        const combinedText = contentLines.join(' ').replace(/\s+/g, ' ');
+
+        console.log(`📝 [PDF Parser] Combined text: ${combinedText.length} characters`);
+
         let successfulExtractions = 0;
+        let ieltsExtractions = 0;
 
-        while (i < contentLines.length) {
-            const currentLine = contentLines[i];
+        // PRIORITY 1: Try Cambridge format (word /ipa/ definition)
+        const cambridgeRegex = /\b([a-zA-Z][\w\-']+)\s+\/([^\/]+)\/\s*([^\/]*?)(?=\s+\b[a-zA-Z][\w\-']+\s+\/|$)/g;
+        const cambridgeMatches = [...combinedText.matchAll(cambridgeRegex)];
 
-            if (isWordLine(currentLine)) {
-                try {
-                    const word = extractWord(currentLine);
-                    const ipa = extractIPA(currentLine);
+        if (cambridgeMatches.length > 0) {
+            console.log(`✅ [Cambridge Parser] Found ${cambridgeMatches.length} raw matches`);
 
-                    if (!ipa) {
-                        i++;
-                        continue;
-                    }
+            for (const match of cambridgeMatches) {
+                const word = match[1].trim();
+                const ipa = match[2].trim();
+                const definition = match[3].trim();
 
-                    // SIMPLIFIED: Only extract word and IPA
-                    // AI will generate clean definition and example later
-                    entries.push({
-                        front: word,
-                        ipa: `/${ipa}/`,
-                        definition: '', // Will be filled by AI
-                        example: '', // Will be filled by AI
-                    });
+                entries.push({
+                    front: word,
+                    ipa: `/${ipa}/`,
+                    definition: definition || '', // May be empty, will be filled by AI
+                    example: '', // Will be filled by AI
+                });
 
-                    successfulExtractions++;
-
-                    if (successfulExtractions <= 10) {
-                        console.log(`✅ Entry ${successfulExtractions}: ${word} /${ipa}/`);
-                    }
-
-                } catch (err) {
-                    console.error(`❌ Error parsing line ${i}:`, err);
-                }
+                successfulExtractions++;
             }
+        } else {
+            // PRIORITY 2: Fallback to IELTS format (word: definition)
+            console.log(`📘 [IELTS Parser] No Cambridge matches, trying IELTS format`);
 
-            i++;
+            const ieltsRegex = /\b([a-zA-Z][\w\-']*)\s*:\s*([^:]+?)(?=\s+\b[a-zA-Z][\w\-']*\s*:|$)/g;
+            const ieltsMatches = [...combinedText.matchAll(ieltsRegex)];
+
+            console.log(`📘 [IELTS Parser] Found ${ieltsMatches.length} potential matches`);
+
+            ieltsMatches.forEach((match) => {
+                const word = match[1].trim();
+                const definition = match[2].trim();
+
+                // Validate word (single word, no spaces)
+                if (!/^[a-zA-Z][\w\-']*$/.test(word)) {
+                    return;
+                }
+
+                // Validate definition (substantial, no IPA slashes)
+                if (definition.length < 5 || definition.includes('/')) {
+                    return;
+                }
+
+                entries.push({
+                    front: word,
+                    ipa: '', // IELTS has no IPA, will be enriched
+                    definition: definition,
+                    example: '', // Will be enriched
+                });
+
+                ieltsExtractions++;
+
+                if (ieltsExtractions <= 10) {
+                    console.log(`📘 IELTS ${ieltsExtractions}: ${word}: ${definition.substring(0, 50)}...`);
+                }
+            });
         }
 
         console.log(`\n📊 [PDF Parser] SUMMARY:`);
-        console.log(`   ✅ Successful extractions: ${successfulExtractions}`);
+        console.log(`   ✅ Cambridge extractions: ${successfulExtractions}`);
+        console.log(`   📘 IELTS extractions: ${ieltsExtractions}`);
         console.log(`   📝 Total entries: ${entries.length}`);
 
         if (entries.length === 0) {
@@ -164,4 +195,114 @@ export async function parsePDF(arrayBuffer: ArrayBuffer): Promise<ParseResult> {
             errors,
         };
     }
+}
+
+// ============================================================================
+// IELTS WORDLIST PARSER (ADDITIVE - NON-BREAKING)
+// ============================================================================
+
+/**
+ * Check if line follows IELTS format: "word: definition"
+ * SAFE: Does not interfere with Cambridge detection
+ */
+function isIELTSFormat(line: string): boolean {
+    const trimmed = line.trim();
+
+    // Must contain exactly one colon
+    const colonCount = (trimmed.match(/:/g) || []).length;
+    if (colonCount !== 1) return false;
+
+    // Split by colon
+    const parts = trimmed.split(':');
+    if (parts.length !== 2) return false;
+
+    const word = parts[0].trim();
+    const definition = parts[1].trim();
+
+    // Word must be a single word (no spaces, only letters/hyphens)
+    if (!word || !/^[a-zA-Z][a-zA-Z\-']*$/.test(word)) return false;
+
+    // Definition must exist and be substantial
+    if (!definition || definition.length < 5) return false;
+
+    // Must NOT match Cambridge format (no IPA slashes)
+    if (trimmed.includes('/')) return false;
+
+    return true;
+}
+
+/**
+ * Parse a single IELTS format line
+ * Format: "word: definition"
+ * Returns normalized ParsedEntry structure
+ */
+function parseIELTSLine(line: string): ParsedEntry | null {
+    try {
+        const parts = line.trim().split(':');
+        if (parts.length !== 2) return null;
+
+        const word = parts[0].trim();
+        const definition = parts[1].trim();
+
+        return {
+            front: word,
+            ipa: '', // IELTS format has no IPA
+            definition: definition,
+            example: '', // IELTS format has no example
+        };
+    } catch (error) {
+        console.error('❌ [IELTS Parser] Error parsing line:', error);
+        return null;
+    }
+}
+
+/**
+ * Parse IELTS wordlist from text using GLOBAL REGEX
+ * CRITICAL FIX: PDF text is squashed into massive lines, so we use matchAll()
+ * instead of line-by-line parsing
+ */
+function parseIELTSWordlist(text: string): ParsedEntry[] {
+    const entries: ParsedEntry[] = [];
+
+    // Normalize text: join everything and normalize spaces
+    const fullText = text.replace(/\s+/g, ' ').trim();
+
+    console.log(`📘 [IELTS Parser] Processing ${fullText.length} characters`);
+
+    // Global regex: word followed by colon, capture everything until next word:colon or end
+    // Pattern: word : definition (lookahead for next word: or end of string)
+    const ieltsRegex = /([a-zA-Z][\w\-']*)\s*:\s*([^:]+?)(?=\s+[a-zA-Z][\w\-']*\s*:|$)/g;
+
+    const matches = [...fullText.matchAll(ieltsRegex)];
+
+    console.log(`📘 [IELTS Parser] Found ${matches.length} potential matches`);
+
+    for (const match of matches) {
+        const word = match[1].trim();
+        const definition = match[2].trim();
+
+        // Validate word (single word, no spaces)
+        if (!/^[a-zA-Z][\w\-']*$/.test(word)) {
+            continue;
+        }
+
+        // Validate definition (substantial, no IPA slashes)
+        if (definition.length < 5 || definition.includes('/')) {
+            continue;
+        }
+
+        entries.push({
+            front: word,
+            ipa: '', // IELTS format has no IPA
+            definition: definition,
+            example: '', // IELTS format has no example
+        });
+
+        if (entries.length <= 10) {
+            console.log(`📘 [IELTS] ${entries.length}. ${word}: ${definition.substring(0, 50)}...`);
+        }
+    }
+
+    console.log(`📘 [IELTS Parser] Extracted ${entries.length} valid entries`);
+    return entries;
 }

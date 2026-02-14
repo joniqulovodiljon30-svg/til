@@ -8,18 +8,20 @@ interface StudySessionProps {
   onExit: () => void;
   language: SupportedLanguage;
   onToggleMistake: (cardId: string) => void;
+  onDeleteCard: (cardId: string) => Promise<void>;
 }
 
 type Mode = 'MENU' | 'STUDY' | 'TEST_TRANSLATION' | 'TEST_SENTENCE';
 type CardSide = 'FRONT' | 'BACK';
 type TestState = 'INPUT' | 'EVALUATING' | 'RESULT';
 
-const StudySession: React.FC<StudySessionProps> = ({ cards, onExit, language, onToggleMistake }) => {
+const StudySession: React.FC<StudySessionProps> = ({ cards, onExit, language, onToggleMistake, onDeleteCard }) => {
   const [mode, setMode] = useState<Mode>('MENU');
 
   // Study State
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isFlipped, setIsFlipped] = useState(false); // For 3D animation
+  const [jumpInput, setJumpInput] = useState('1'); // Jump Input State
 
   // Test State
   const [userAnswer, setUserAnswer] = useState('');
@@ -29,7 +31,10 @@ const StudySession: React.FC<StudySessionProps> = ({ cards, onExit, language, on
   // Audio playing state
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
 
-
+  // Sync Jump Input with Current Index
+  useEffect(() => {
+    setJumpInput((currentIndex + 1).toString());
+  }, [currentIndex]);
 
   // Safety check for index
   useEffect(() => {
@@ -39,6 +44,28 @@ const StudySession: React.FC<StudySessionProps> = ({ cards, onExit, language, on
   }, [cards.length, currentIndex]);
 
   const currentCard = cards[currentIndex];
+
+  const handleJump = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      let page = parseInt(jumpInput);
+      if (isNaN(page)) page = 1;
+      // Clamp value
+      page = Math.max(1, Math.min(page, cards.length));
+      setCurrentIndex(page - 1);
+      e.currentTarget.blur();
+    }
+  };
+
+  const handleBlur = () => {
+    setJumpInput((currentIndex + 1).toString());
+  };
+
+  const handleDeleteCurrent = async () => {
+    if (window.confirm("Bu so'zni o'chirib tashlashga ishonchingiz komilmi?")) {
+      await onDeleteCard(currentCard.id);
+      // Index adjustment is handled by the useEffect above
+    }
+  };
 
 
   useEffect(() => {
@@ -211,9 +238,20 @@ const StudySession: React.FC<StudySessionProps> = ({ cards, onExit, language, on
             <h2 className="text-sm font-black uppercase tracking-widest text-slate-900">
               {mode === 'STUDY' ? 'Study' : mode === 'TEST_TRANSLATION' ? 'Translation' : 'Sentences'}
             </h2>
-            <p className="text-[10px] font-bold text-slate-400">
-              Card {currentIndex + 1} / {cards.length} ({language.toUpperCase()})
-            </p>
+            <div className="flex items-center gap-2 mt-1">
+              <span className="text-[10px] font-bold text-slate-400">Card</span>
+              <input
+                type="number"
+                className="w-12 h-6 text-center text-[10px] font-bold text-slate-600 bg-gray-100 rounded border border-gray-200 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-all"
+                value={jumpInput}
+                onChange={(e) => setJumpInput(e.target.value)}
+                onKeyDown={handleJump}
+                onBlur={handleBlur}
+                min={1}
+                max={cards.length}
+              />
+              <span className="text-[10px] font-bold text-slate-400">/ {cards.length} ({language.toUpperCase()})</span>
+            </div>
           </div>
         </div>
         <div className="w-24 bg-gray-100 h-1 rounded-full overflow-hidden">
@@ -239,13 +277,40 @@ const StudySession: React.FC<StudySessionProps> = ({ cards, onExit, language, on
                 transform: isFlipped ? 'rotateY(180deg)' : 'rotateY(0deg)'
               }}
             >
+              {/* DELETE BUTTON (Absolute, outside flipping face but inside 3D container? No, needs to be on the FRONT face or floating above) */}
+              {/* If we put it here, it rotates with the card. If we want it always visible, it should be outside the 3D wrapper. 
+                  But user said "top-right corner of the flashcard container". 
+                  Let's put it on the FRONT face for now, as deleting usually happens when looking at the word. 
+                  Actually, user might want to delete after seeing the back.
+                  Let's check the user requirement: "top-right corner of the flashcard container". 
+                  Best to float it? Use a separate z-index layer independent of rotation? 
+                  If I put it outside the `div` with `rotateY`, it won't rotate. 
+                  Let's try putting it inside the `relative` wrapper but outside the `rotate` div?
+                  Refactoring the structure slightly to support a non-rotating button would be safer.
+                  BUT, simpler implementation: Put it on the FRONT face.
+              */}
+
               {/* FRONT SIDE */}
               <div
                 className="absolute inset-0 bg-white rounded-3xl shadow-2xl border-2 border-slate-100 flex flex-col items-center justify-center p-8 backface-hidden"
                 style={{ backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden' }}
               >
+                {/* DELETE BUTTON - Top Right */}
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDeleteCurrent();
+                  }}
+                  className="absolute top-5 right-5 z-20 w-8 h-8 flex items-center justify-center text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-full transition-all"
+                  title="Delete Card"
+                >
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+
                 {currentCard.isMistake && (
-                  <div className="absolute top-6 right-6 bg-red-100 text-red-600 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest">
+                  <div className="absolute top-6 left-6 bg-red-100 text-red-600 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest">
                     Mistake
                   </div>
                 )}
@@ -281,13 +346,29 @@ const StudySession: React.FC<StudySessionProps> = ({ cards, onExit, language, on
                   transform: 'rotateY(180deg)'
                 }}
               >
-                <div className="flex-1 flex flex-col items-center justify-center w-full text-center">
-                  <h2 className="text-3xl md:text-4xl font-black text-indigo-400 mb-6">{currentCard.translation}</h2>
-                  <div className="w-12 h-1 bg-slate-700 rounded-full mb-6"></div>
-                  <p className="text-lg text-slate-300 leading-relaxed mb-8 font-medium max-w-sm">{currentCard.definition}</p>
-                  <div className="bg-slate-800 p-4 rounded-xl border border-slate-700 w-full max-w-sm">
-                    <p className="text-base italic text-slate-400">"{currentCard.example}"</p>
+                <div className="flex-1 flex flex-col items-center justify-center w-full text-center px-4">
+                  {/* ZEALOUS STYLE: Balanced Typography */}
+                  <h2 className="text-2xl md:text-3xl font-black text-purple-600 mb-2 drop-shadow-xl tracking-tight">
+                    {currentCard.translation.split('\n')[0].replace(/<[^>]*>?/gm, '').replace(/Audio:.*$/i, '').trim()}
+                  </h2>
+
+                  <div className="w-20 h-1 bg-purple-100/20 rounded-full mb-10"></div>
+
+                  {/* CLEAN DEFINITION (Plain white text, text-base) */}
+                  <div className="max-w-md">
+                    <p className="text-base text-white leading-relaxed font-bold">
+                      {currentCard.definition.replace(/<[^>]*>?/gm, '').replace(/Audio:.*$/i, '').trim()}
+                    </p>
                   </div>
+
+                  {/* EXAMPLE BOX (Styled & Separated) */}
+                  {currentCard.example && (
+                    <div className="mt-12 bg-white/10 border border-white/20 backdrop-blur-sm p-6 rounded-2xl w-full max-w-lg shadow-2xl">
+                      <p className="text-purple-200 font-bold italic text-md leading-relaxed">
+                        "{currentCard.example.replace(/^Example:\s*/i, '').replace(/<[^>]*>?/gm, '').trim()}"
+                      </p>
+                    </div>
+                  )}
                 </div>
                 <div className="mt-auto">
                   <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">Tap to Flip Back</p>
@@ -344,55 +425,57 @@ const StudySession: React.FC<StudySessionProps> = ({ cards, onExit, language, on
       </div>
 
       {/* FOOTER CONTROLS */}
-      {mode === 'STUDY' && (
-        <div className="bg-white border-t border-gray-200 p-4 md:p-6 shrink-0 z-20">
-          <div className="max-w-xl mx-auto flex items-center gap-4">
-            {/* MISTAKE TOGGLE BUTTON */}
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onToggleMistake(currentCard.id);
-              }}
-              className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-all shadow-lg active:scale-95 ${currentCard.isMistake
-                ? 'bg-emerald-100 text-emerald-600 hover:bg-emerald-200 border-2 border-emerald-300'
-                : 'bg-rose-50 text-rose-400 hover:bg-rose-100 border-2 border-transparent hover:border-rose-200'
-                }`}
-              title={currentCard.isMistake ? "Mark as Mastered (Remove from Mistakes)" : "Mark as Mistake"}
-            >
-              {currentCard.isMistake ? (
-                <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
-              ) : (
-                <span className="text-2xl font-black">?</span>
-              )}
-            </button>
+      {
+        mode === 'STUDY' && (
+          <div className="bg-white border-t border-gray-200 p-4 md:p-6 shrink-0 z-20">
+            <div className="max-w-xl mx-auto flex items-center gap-4">
+              {/* MISTAKE TOGGLE BUTTON */}
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onToggleMistake(currentCard.id);
+                }}
+                className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-all shadow-lg active:scale-95 ${currentCard.isMistake
+                  ? 'bg-emerald-100 text-emerald-600 hover:bg-emerald-200 border-2 border-emerald-300'
+                  : 'bg-rose-50 text-rose-400 hover:bg-rose-100 border-2 border-transparent hover:border-rose-200'
+                  }`}
+                title={currentCard.isMistake ? "Mark as Mastered (Remove from Mistakes)" : "Mark as Mistake"}
+              >
+                {currentCard.isMistake ? (
+                  <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
+                ) : (
+                  <span className="text-2xl font-black">?</span>
+                )}
+              </button>
 
-            {/* NAVIGATION */}
-            <div className="flex-1 flex gap-3">
-              <button
-                onClick={handlePrev}
-                disabled={currentIndex === 0}
-                className={`flex-1 py-4 rounded-xl font-black text-xs uppercase tracking-widest transition-all ${currentIndex === 0
-                  ? 'bg-gray-50 text-gray-300 cursor-not-allowed'
-                  : 'bg-white border-2 border-gray-100 text-slate-900 hover:border-slate-300'
-                  }`}
-              >
-                Prev
-              </button>
-              <button
-                onClick={handleNext}
-                disabled={currentIndex === cards.length - 1}
-                className={`flex-1 py-4 rounded-xl font-black text-xs uppercase tracking-widest transition-all ${currentIndex === cards.length - 1
-                  ? 'bg-gray-50 text-gray-300 cursor-not-allowed'
-                  : 'bg-slate-900 text-white hover:bg-slate-800 shadow-xl shadow-slate-200'
-                  }`}
-              >
-                Next
-              </button>
+              {/* NAVIGATION */}
+              <div className="flex-1 flex gap-3">
+                <button
+                  onClick={handlePrev}
+                  disabled={currentIndex === 0}
+                  className={`flex-1 py-4 rounded-xl font-black text-xs uppercase tracking-widest transition-all ${currentIndex === 0
+                    ? 'bg-gray-50 text-gray-300 cursor-not-allowed'
+                    : 'bg-white border-2 border-gray-100 text-slate-900 hover:border-slate-300'
+                    }`}
+                >
+                  Prev
+                </button>
+                <button
+                  onClick={handleNext}
+                  disabled={currentIndex === cards.length - 1}
+                  className={`flex-1 py-4 rounded-xl font-black text-xs uppercase tracking-widest transition-all ${currentIndex === cards.length - 1
+                    ? 'bg-gray-50 text-gray-300 cursor-not-allowed'
+                    : 'bg-slate-900 text-white hover:bg-slate-800 shadow-xl shadow-slate-200'
+                    }`}
+                >
+                  Next
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
-    </div>
+        )
+      }
+    </div >
   );
 };
 

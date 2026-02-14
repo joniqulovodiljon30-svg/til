@@ -19,13 +19,6 @@ export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
         detectSessionInUrl: true,
         storage: window.localStorage,
     },
-    global: {
-        headers: {
-            'Accept': 'application/json',
-            'Content-Type': 'application/json',
-            'Prefer': 'return=representation',
-        },
-    },
     db: {
         schema: 'public',
     },

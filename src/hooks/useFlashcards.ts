@@ -20,6 +20,7 @@ interface UseFlashcardsReturn {
     toggleMistake: (id: string) => Promise<void>;
     syncLocalToSupabase: () => Promise<{ success: boolean; error?: string }>;
     hasLocalData: () => boolean;
+    refetch: () => Promise<void>;
 }
 
 const normalizeWord = (word: string): string => {
@@ -106,11 +107,11 @@ export const useFlashcards = (): UseFlashcardsReturn => {
             setLoading(true);
             setError(null);
 
-            const { data, error: fetchError } = await supabase
+            const { data, error: fetchError } = await (supabase
                 .from('flashcards')
-                .select('*')
+                .select('id, front, back, ipa, transcription, definition, example, category, batch_id, created_at, is_mistake, audio, user_id')
                 .eq('user_id', user.id)
-                .order('created_at', { ascending: false });
+                .order('created_at', { ascending: false }) as any); // Type cast to bypass strict schema linting for new column
 
             if (fetchError) {
                 console.error('[useFlashcards] Fetch error:', fetchError.message);
@@ -123,6 +124,7 @@ export const useFlashcards = (): UseFlashcardsReturn => {
                 id: row.id,
                 word: row.front,
                 ipa: row.ipa || '',
+                transcription: (row as any).transcription || row.ipa || '', // Map transcription, fallback to ipa
                 audio: row.audio || undefined,
                 translation: row.back,
                 definition: (row as any).definition || '',
@@ -130,7 +132,7 @@ export const useFlashcards = (): UseFlashcardsReturn => {
                 batchId: row.batch_id || row.category || 'General',
                 language: row.category as SupportedLanguage,
                 createdAt: new Date(row.created_at).getTime(),
-                isMistake: row.is_mistake || false,
+                isMistake: (row as any).is_mistake ?? false,
             }));
 
             setFlashcards(cards);
@@ -146,6 +148,30 @@ export const useFlashcards = (): UseFlashcardsReturn => {
         if (user) {
             console.log('[useFlashcards] User authenticated, loading from Supabase');
             loadFromSupabase();
+
+            // REAL-TIME SUBSCRIPTION
+            console.log('[useFlashcards] Setting up Real-time subscription for', user.id);
+            const channel = supabase
+                .channel(`public:flashcards:user:${user.id}`)
+                .on(
+                    'postgres_changes',
+                    {
+                        event: '*',
+                        schema: 'public',
+                        table: 'flashcards',
+                        filter: `user_id=eq.${user.id}`,
+                    },
+                    (payload) => {
+                        console.log('[useFlashcards] Real-time change detected:', payload.eventType);
+                        loadFromSupabase(); // Refetch on any change for simplicity/data integrity
+                    }
+                )
+                .subscribe();
+
+            return () => {
+                console.log('[useFlashcards] Cleaning up Real-time subscription');
+                supabase.removeChannel(channel);
+            };
         } else {
             console.log('[useFlashcards] Guest mode, loading from localStorage');
             const localCards = loadFromLocalStorage();
@@ -244,7 +270,8 @@ export const useFlashcards = (): UseFlashcardsReturn => {
             const { data: existingCards, error: fetchError } = await supabase
                 .from('flashcards')
                 .select('front, category, user_id')
-                .eq('user_id', user.id);
+                .eq('user_id', user.id)
+                .range(0, 5000);
 
             if (fetchError) {
                 console.error('[useFlashcards] Fetch error:', fetchError.message);
@@ -466,5 +493,6 @@ export const useFlashcards = (): UseFlashcardsReturn => {
         toggleMistake,
         syncLocalToSupabase,
         hasLocalData,
+        refetch: loadFromSupabase,
     };
 };

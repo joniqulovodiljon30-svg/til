@@ -15,6 +15,7 @@ export const Card: React.FC<CardProps> = ({
     onPrev,
     currentIndex = 1,
     totalCards = 1,
+    onDelete,
 }) => {
     const [isFlipped, setIsFlipped] = useState(false);
     const [audioPlaying, setAudioPlaying] = useState(false);
@@ -58,6 +59,22 @@ export const Card: React.FC<CardProps> = ({
                 className="relative bg-white rounded-3xl shadow-2xl overflow-hidden cursor-pointer transition-all duration-300 hover:shadow-3xl"
                 style={{ minHeight: '500px' }}
             >
+                {/* DELETE BUTTON */}
+                {onDelete && (
+                    <button
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            onDelete();
+                        }}
+                        className="absolute top-6 right-6 z-20 p-2 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-full transition-all"
+                        title="Delete Card"
+                    >
+                        <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                )}
+
                 {!isFlipped ? (
                     /* FRONT SIDE */
                     <div className="p-12 flex flex-col items-center justify-center h-full min-h-[500px]">
@@ -80,8 +97,8 @@ export const Card: React.FC<CardProps> = ({
                                 <button
                                     onClick={handlePlayAudio}
                                     className={`w-12 h-12 rounded-full flex items-center justify-center transition-all ${audioPlaying
-                                            ? 'bg-indigo-600 scale-110'
-                                            : 'bg-indigo-500 hover:bg-indigo-600'
+                                        ? 'bg-indigo-600 scale-110'
+                                        : 'bg-indigo-500 hover:bg-indigo-600'
                                         } shadow-lg hover:shadow-xl`}
                                 >
                                     <svg

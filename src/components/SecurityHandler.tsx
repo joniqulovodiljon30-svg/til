@@ -1,6 +1,6 @@
 
 import React, { useEffect, useState } from 'react';
-import { addToBlacklist, removeFromBlacklist } from '../../services/supabase';
+import { addToBlacklist, removeFromBlacklist } from '../lib/security';
 
 const SecurityHandler: React.FC = () => {
   const [status, setStatus] = useState<string>('Processing...');

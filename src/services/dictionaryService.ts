@@ -20,6 +20,7 @@ interface DictionaryResponse {
 interface EnrichedWordData {
     word: string;
     ipa: string;
+    transcription?: string;
     definition: string;
     example: string;
     audio: string;

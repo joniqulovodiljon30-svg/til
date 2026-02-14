@@ -39,11 +39,11 @@ const Dashboard: React.FC = () => {
     addFlashcards,
     addDemoCards,
     deleteBatch,
+    deleteFlashcard,
     toggleMistake,
     syncLocalToSupabase,
     hasLocalData,
   } = useFlashcards();
-
 
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -130,6 +130,12 @@ const Dashboard: React.FC = () => {
       if (b[0] === 'Mistakes') return 1;
       return b[0].localeCompare(a[0]);
     });
+  }, [flashcards]);
+
+  // Extract unique batch IDs for Smart Import dropdown
+  const existingBatchIds = useMemo(() => {
+    const uniqueBatches = new Set(flashcards.map((c) => c.batchId));
+    return Array.from(uniqueBatches).sort().reverse();
   }, [flashcards]);
 
   // Filter batches by CURRENT selected language
@@ -339,6 +345,7 @@ const Dashboard: React.FC = () => {
             onExit={() => setStudyBatchId(null)}
             language={studyBatchLang}
             onToggleMistake={handleToggleMistake}
+            onDeleteCard={deleteFlashcard}
           />
         </div>
       )}
@@ -491,6 +498,7 @@ const Dashboard: React.FC = () => {
               activeLanguage={targetLanguage}
               onStudy={(batchId) => setStudyBatchId(batchId)}
               onDelete={(batchId) => deleteBatch(batchId)}
+              loading={flashcardsLoading}
             />
           </section>
 

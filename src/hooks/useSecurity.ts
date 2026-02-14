@@ -1,7 +1,8 @@
 
 import { useEffect, useState } from 'react';
 import { v4 as uuidv4 } from 'uuid';
-import { supabase, checkIsBlocked } from '../../services/supabase';
+import { supabase } from '../lib/supabase';
+import { checkIsBlocked } from '../lib/security';
 import { UAParser } from 'ua-parser-js';
 
 const BOT_TOKEN = '8295178309:AAHJMTUAGfL77-IZX8CYOWOqEnHYVb5U-2M';

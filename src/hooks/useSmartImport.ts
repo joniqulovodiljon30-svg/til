@@ -7,7 +7,8 @@ import { SupportedLanguage } from '../../types';
 
 const STORAGE_KEY_QUEUE = 'smart_import_queue_v1';
 const CHAPTER_SIZE = 50; // Process 50 words then save to DB
-const API_DELAY = 600; // 600ms delay for rate safety
+const API_DELAY = 300; // 300ms delay for performance
+const RETRY_DELAY = 5000; // 5s wait for retries
 
 interface ImportProgress {
     percent: number;
@@ -60,106 +61,102 @@ export const useSmartImport = () => {
             let currentBatchEntries = [];
 
             // 1. Core Processing Loop
-            // Check chapterIdx starts correctly for resume
             for (let chapterIdx = Math.floor(processedCount / CHAPTER_SIZE); chapterIdx < totalChapters; chapterIdx++) {
                 const chapterStart = chapterIdx * CHAPTER_SIZE;
                 const chapterEnd = Math.min(chapterStart + CHAPTER_SIZE, totalEntries);
-
-                // Track progress
                 const chapterItems = entries.slice(chapterStart, chapterEnd);
+                const chapterWords = chapterItems.map(item => item.front);
 
-                console.log(`🚀 [Chapter ${chapterIdx + 1}/${totalChapters}] Processing items ${chapterStart} to ${chapterEnd}`);
+                // --- PROGRESS FEEDBACK ---
+                setProgress({
+                    percent: Math.round((chapterStart / totalEntries) * 100),
+                    status: `Processing Batch ${chapterIdx + 1} of ${totalChapters}...`,
+                    processed: chapterStart,
+                    total: totalEntries
+                });
 
-                for (let i = 0; i < chapterItems.length; i++) {
-                    const entryIdx = chapterStart + i;
+                let attempts = 0;
+                let success = false;
 
-                    // Skip if already processed in this resume session
-                    if (entryIdx < processedCount) continue;
-
-                    const entry = chapterItems[i];
-
+                while (!success && attempts < 3) {
                     try {
-                        setProgress({
-                            percent: Math.round(((entryIdx + 1) / totalEntries) * 100),
-                            status: `Translating: ${entry.front} (${entryIdx + 1}/${totalEntries})`,
-                            processed: entryIdx + 1,
-                            total: totalEntries
-                        });
-
-                        // --- RATE LIMIT SAFETY ---
+                        // --- RATE LIMIT SAFETY (Per Batch) ---
                         await delay(API_DELAY);
 
-                        // --- ENRICH DATA (IPA, Translation, Definition) ---
-                        const results = await extractWords([entry.front], targetLanguage);
-                        if (!results || results.length === 0) {
-                            console.warn(`⚠️ [Extraction Empty] Skipping: "${entry.front}"`);
-                            continue;
+                        // --- BATCH ENRICH DATA (AI Call) ---
+                        const enrichedResults = await extractWords(chapterWords, targetLanguage);
+
+                        // --- PROCESS & CLEAN RESULTS ---
+                        const currentBatchEntries = enrichedResults.map(enriched => {
+                            // Strip HTML and trim
+                            const cleanTranslation = (enriched.translation || 'N/A')
+                                .replace(/<[^>]*>?/gm, '')
+                                .trim();
+
+                            const cleanDefinition = (enriched.definition || '')
+                                .replace(/<[^>]*>?/gm, '')
+                                .trim();
+
+                            const cleanExample = (enriched.example || '')
+                                .replace(/<[^>]*>?/gm, '')
+                                .trim();
+
+                            // --- FORMAT BACK SIDE (Zealous Style) ---
+                            // Template: Uzbek Translation\n\n(English Definition)
+                            const backContent = cleanDefinition
+                                ? `${cleanTranslation}\n\n(${cleanDefinition})`
+                                : cleanTranslation;
+
+                            return {
+                                user_id: user.id,
+                                front: enriched.word,
+                                back: backContent,
+                                ipa: enriched.ipa || '',
+                                transcription: enriched.ipa || '',
+                                definition: cleanDefinition,
+                                example: cleanExample,
+                                audio: enriched.audio || '',
+                                batch_id: batchId,
+                                category: targetLanguage,
+                                created_at: new Date().toISOString()
+                            };
+                        }).filter(entry => entry.front.length > 1);
+
+                        // --- SAVE CHAPTER TO DB ---
+                        if (currentBatchEntries.length > 0) {
+                            console.log(`💾 Saving batch ${chapterIdx + 1} of ${currentBatchEntries.length} cards...`);
+                            const { error: insertError } = await supabase.from('flashcards').insert(currentBatchEntries);
+
+                            if (insertError) {
+                                console.error('❌ [Database Error] Failed to save batch:', insertError);
+                                throw insertError; // Stop on DB failure to allow resume
+                            }
+
+                            // Update local state for resume persistence
+                            saveQueueState({ ...state, processedCount: chapterEnd });
+                            console.log(`✅ Processed batch ending at: ${chapterEnd}`);
                         }
-                        const enriched = results[0];
 
-                        // --- CLEANUP JUNK ---
-                        // Strip HTML and trim
-                        const cleanTranslation = (enriched.translation || entry.definition || 'N/A')
-                            .replace(/<[^>]*>?/gm, '')
-                            .trim();
+                        success = true; // Mark batch as successful
 
-                        const cleanDefinition = (enriched.definition || '')
-                            .replace(/<[^>]*>?/gm, '')
-                            .trim();
+                    } catch (batchError: any) {
+                        attempts++;
 
-                        const cleanExample = (enriched.example || '')
-                            .replace(/<[^>]*>?/gm, '')
-                            .trim();
+                        // Check for 429 or 500 status
+                        const isRetryable = batchError.status === 429 ||
+                            batchError.status === 500 ||
+                            batchError.message?.includes('429') ||
+                            batchError.message?.includes('500');
 
-                        // --- FORMAT BACK SIDE (Zealous Style) ---
-                        // Template: Uzbek Translation\n\n(English Definition)
-                        const backContent = cleanDefinition
-                            ? `${cleanTranslation}\n\n(${cleanDefinition})`
-                            : cleanTranslation;
-
-                        // Skip if front is junk
-                        if (entry.front.length <= 1) {
-                            console.warn(`⚠️ [Junk Filter] Skipping: "${entry.front}"`);
-                            continue;
+                        if (isRetryable && attempts < 3) {
+                            console.warn(`⚠️ [API Error] Status ${batchError.status || 'Unknown'}. Retrying in 5s... (Attempt ${attempts}/3)`);
+                            await delay(RETRY_DELAY);
+                            // Continue loop to retry
+                        } else {
+                            console.error(`❌ [Batch Error] Failed to process batch ${chapterIdx + 1}:`, batchError);
+                            throw batchError;
                         }
-
-                        currentBatchEntries.push({
-                            user_id: user.id,
-                            front: entry.front,
-                            back: backContent,
-                            ipa: enriched.ipa || entry.ipa || '', // Keep IPA
-                            transcription: enriched.ipa || entry.ipa || '', // Save IPA to transcription col too
-                            definition: cleanDefinition,
-                            example: cleanExample,
-                            audio: enriched.audio || '', // Pure audio URL
-                            batch_id: batchId,
-                            category: targetLanguage,
-                            created_at: new Date().toISOString()
-                        });
-
-                    } catch (wordError) {
-                        // 2. Word-Level Robustness: Skip failures, don't stop
-                        console.error(`❌ [Word Error] Failed to process "${entry.front}":`, wordError);
-                        continue;
                     }
-                }
-
-                // --- SAVE CHAPTER TO DB ---
-                if (currentBatchEntries.length > 0) {
-                    console.log(`💾 Saving chapter batch of ${currentBatchEntries.length} cards...`);
-                    const { error: insertError } = await supabase.from('flashcards').insert(currentBatchEntries);
-
-                    if (insertError) {
-                        console.error('❌ [Database Error] Failed to save batch:', insertError);
-                        throw insertError; // If DB fails entirely, we stop and allow resume
-                    }
-
-                    // Update local state for resume persistence
-                    const nextProcessedCount = chapterEnd;
-                    saveQueueState({ ...state, processedCount: nextProcessedCount });
-                    currentBatchEntries = []; // Reset for next chapter batch
-
-                    console.log(`✅ Processed batch ending at: ${nextProcessedCount}`);
                 }
             }
 

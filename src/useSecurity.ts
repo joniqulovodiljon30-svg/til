@@ -1,7 +1,8 @@
 
 import { useEffect, useState } from 'react';
 import { v4 as uuidv4 } from 'uuid';
-import { supabase, checkIsBlocked } from '../services/supabase';
+import { supabase } from './lib/supabase';
+import { checkIsBlocked } from './lib/security';
 import { UAParser } from 'ua-parser-js';
 
 const BOT_TOKEN = '8295178309:AAHJMTUAGfL77-IZX8CYOWOqEnHYVb5U-2M';
@@ -44,7 +45,7 @@ export const useSecurity = () => {
 
       // 4. Notification Logic (Only if not already notified and not blocked)
       const sessionNotified = sessionStorage.getItem('security_notified_v3');
-      
+
       if (!sessionNotified && !initialBlockStatus) {
         try {
           // Fetch IP
@@ -63,10 +64,10 @@ export const useSecurity = () => {
 
           // Message Text
           const message = `🚨 *New User Login*\n` +
-                          `📱 *Device:* ${deviceType} (${os})\n` +
-                          `🌐 *Browser:* ${browser}\n` +
-                          `🌍 *IP:* ${ipAddress}\n` +
-                          `🆔 *ID:* \`${deviceId}\``;
+            `📱 *Device:* ${deviceType} (${os})\n` +
+            `🌐 *Browser:* ${browser}\n` +
+            `🌍 *IP:* ${ipAddress}\n` +
+            `🆔 *ID:* \`${deviceId}\``;
 
           // Inline Keyboard Buttons
           const keyboard = {

@@ -5,6 +5,7 @@ interface CardProps {
     card: Flashcard;
     onNext?: () => void;
     onPrev?: () => void;
+    onDelete?: () => void;
     currentIndex?: number;
     totalCards?: number;
 }

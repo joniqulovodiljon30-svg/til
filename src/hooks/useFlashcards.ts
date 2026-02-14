@@ -111,7 +111,8 @@ export const useFlashcards = (): UseFlashcardsReturn => {
                 .from('flashcards')
                 .select('id, front, back, ipa, transcription, definition, example, category, batch_id, created_at, is_mistake, audio, user_id')
                 .eq('user_id', user.id)
-                .order('created_at', { ascending: false }) as any); // Type cast to bypass strict schema linting for new column
+                .order('created_at', { ascending: false })
+                .limit(200000) as any); // Set strict 200,000 limit
 
             if (fetchError) {
                 console.error('[useFlashcards] Fetch error:', fetchError.message);

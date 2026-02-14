@@ -228,7 +228,7 @@ export const useSmartImport = (): UseSmartImportReturn => {
 
             try {
                 const { batchId, targetLanguage, entries, processedCount } = queue;
-                const totalEntries = entries.length;
+                const totalEntries = Math.min(entries.length, 200000); // Strict 200,000 limit
                 const CHAPTER_SIZE = 50;
                 const totalChapters = Math.ceil(totalEntries / CHAPTER_SIZE);
 

@@ -89,7 +89,7 @@ export async function parsePDF(arrayBuffer: ArrayBuffer): Promise<ParseResult> {
     let entries: ParsedEntry[] = [];
 
     try {
-        console.log(`🔍 [PDF Parser] Starting extraction (Unlimited Target)...`);
+        console.log(`🔍 [PDF Parser] Starting extraction (200,000 Target Limit)...`);
 
         // Extract text
         const fullText = await extractTextFromPDF(arrayBuffer);

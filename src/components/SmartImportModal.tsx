@@ -91,7 +91,7 @@ export const SmartImportModal: React.FC<SmartImportModalProps> = ({
             return;
         }
 
-        await importFromPDF(selectedFile, batchId, targetLanguage, refetch);
+        await importFromPDF(selectedFile, batchId, targetLanguage);
 
         if (!error) {
             setSelectedFile(null);
@@ -154,7 +154,7 @@ export const SmartImportModal: React.FC<SmartImportModalProps> = ({
                                     </p>
                                     <div className="flex gap-2">
                                         <button
-                                            onClick={() => resumeImport(refetch)}
+                                            onClick={() => resumeImport()}
                                             className="px-4 py-1.5 bg-yellow-600 hover:bg-yellow-700 text-white rounded-lg font-bold text-xs uppercase tracking-wider transition-all"
                                         >
                                             Resume Now

@@ -497,7 +497,7 @@ const Dashboard: React.FC = () => {
               flashcards={flashcards}
               activeLanguage={targetLanguage}
               onStudy={(batchId) => setStudyBatchId(batchId)}
-              onDelete={(batchId) => deleteBatch(batchId)}
+              onDelete={(batchId) => setBatchToDelete(batchId)}
               loading={flashcardsLoading}
             />
           </section>

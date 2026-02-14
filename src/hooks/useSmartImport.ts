@@ -56,38 +56,32 @@ export const useSmartImport = () => {
         try {
             const { entries, batchId, targetLanguage, processedCount } = state;
             const totalEntries = Math.min(entries.length, 200000); // Strict 200,000 limit
-            const totalChapters = Math.ceil(totalEntries / CHAPTER_SIZE);
 
-            let currentBatchEntries = [];
+            // 1. Core Processing Loop (Granular for UI Feedback)
+            let tempBatch = [];
 
-            // 1. Core Processing Loop
-            for (let chapterIdx = Math.floor(processedCount / CHAPTER_SIZE); chapterIdx < totalChapters; chapterIdx++) {
-                const chapterStart = chapterIdx * CHAPTER_SIZE;
-                const chapterEnd = Math.min(chapterStart + CHAPTER_SIZE, totalEntries);
-                const chapterItems = entries.slice(chapterStart, chapterEnd);
-                const chapterWords = chapterItems.map(item => item.front);
+            for (let i = processedCount; i < totalEntries; i++) {
+                const entry = entries[i];
 
-                // --- PROGRESS FEEDBACK ---
+                // --- GRANULAR PROGRESS (The 'Matrix' Effect) ---
                 setProgress({
-                    percent: Math.round((chapterStart / totalEntries) * 100),
-                    status: `Processing Batch ${chapterIdx + 1} of ${totalChapters}...`,
-                    processed: chapterStart,
+                    percent: Math.round((i / totalEntries) * 100),
+                    status: `Translating: ${entry.front} (${i + 1}/${totalEntries})`,
+                    processed: i,
                     total: totalEntries
                 });
 
                 let attempts = 0;
-                let success = false;
+                let wordSuccess = false;
 
-                while (!success && attempts < 3) {
+                while (!wordSuccess && attempts < 3) {
                     try {
-                        // --- RATE LIMIT SAFETY (Per Batch) ---
-                        await delay(API_DELAY);
+                        // --- ENRICH DATA (AI Call) ---
+                        const results = await extractWords([entry.front], targetLanguage);
 
-                        // --- BATCH ENRICH DATA (AI Call) ---
-                        const enrichedResults = await extractWords(chapterWords, targetLanguage);
+                        if (results && results.length > 0) {
+                            const enriched = results[0];
 
-                        // --- PROCESS & CLEAN RESULTS ---
-                        const currentBatchEntries = enrichedResults.map(enriched => {
                             // Strip HTML and trim
                             const cleanTranslation = (enriched.translation || 'N/A')
                                 .replace(/<[^>]*>?/gm, '')
@@ -101,15 +95,13 @@ export const useSmartImport = () => {
                                 .replace(/<[^>]*>?/gm, '')
                                 .trim();
 
-                            // --- FORMAT BACK SIDE (Zealous Style) ---
-                            // Template: Uzbek Translation\n\n(English Definition)
                             const backContent = cleanDefinition
                                 ? `${cleanTranslation}\n\n(${cleanDefinition})`
                                 : cleanTranslation;
 
-                            return {
+                            tempBatch.push({
                                 user_id: user.id,
-                                front: enriched.word,
+                                front: enriched.word || entry.front,
                                 back: backContent,
                                 ipa: enriched.ipa || '',
                                 transcription: enriched.ipa || '',
@@ -119,49 +111,60 @@ export const useSmartImport = () => {
                                 batch_id: batchId,
                                 category: targetLanguage,
                                 created_at: new Date().toISOString()
-                            };
-                        }).filter(entry => entry.front.length > 1);
-
-                        // --- SAVE CHAPTER TO DB ---
-                        if (currentBatchEntries.length > 0) {
-                            console.log(`💾 Saving batch ${chapterIdx + 1} of ${currentBatchEntries.length} cards...`);
-                            const { error: insertError } = await supabase.from('flashcards').insert(currentBatchEntries);
-
-                            if (insertError) {
-                                console.error('❌ [Database Error] Failed to save batch:', insertError);
-                                throw insertError; // Stop on DB failure to allow resume
-                            }
-
-                            // Update local state for resume persistence
-                            saveQueueState({ ...state, processedCount: chapterEnd });
-                            console.log(`✅ Processed batch ending at: ${chapterEnd}`);
+                            });
                         }
 
-                        success = true; // Mark batch as successful
+                        wordSuccess = true;
 
-                    } catch (batchError: any) {
+                    } catch (err: any) {
                         attempts++;
-
-                        // Check for 429 or 500 status
-                        const isRetryable = batchError.status === 429 ||
-                            batchError.status === 500 ||
-                            batchError.message?.includes('429') ||
-                            batchError.message?.includes('500');
+                        const isRetryable = err.status === 429 || err.status === 500 ||
+                            err.message?.includes('429') || err.message?.includes('500');
 
                         if (isRetryable && attempts < 3) {
-                            console.warn(`⚠️ [API Error] Status ${batchError.status || 'Unknown'}. Retrying in 5s... (Attempt ${attempts}/3)`);
+                            console.warn(`⚠️ [Retry] ${entry.front} failed. Waiting 5s...`);
                             await delay(RETRY_DELAY);
-                            // Continue loop to retry
                         } else {
-                            console.error(`❌ [Batch Error] Failed to process batch ${chapterIdx + 1}:`, batchError);
-                            throw batchError;
+                            console.error(`❌ [Fatal Word Error] ${entry.front}:`, err);
+                            // Avoid stopping the whole import for individual AI failures
+                            wordSuccess = true;
                         }
+                    }
+                }
+
+                // --- CONSTANT PACE DELAY ---
+                await delay(API_DELAY);
+
+                // --- BATCH SAVE (Safety & Performance with UPSERT) ---
+                if (tempBatch.length >= CHAPTER_SIZE || i === totalEntries - 1) {
+                    if (tempBatch.length > 0) {
+                        console.log(`💾 Upserting batch of ${tempBatch.length} cards... (Progress: ${i + 1}/${totalEntries})`);
+
+                        const { error: upsertError } = await supabase
+                            .from('flashcards')
+                            .upsert(tempBatch, {
+                                onConflict: 'user_id, front, batch_id',
+                                ignoreDuplicates: true
+                            });
+
+                        if (upsertError) {
+                            if (upsertError.code === '23505') {
+                                console.warn('⚠️ [Duplicate Warning] Skipping duplicates in batch...');
+                                // Continue to next batch
+                            } else {
+                                console.error('❌ [Database Error] Failed to upsert batch:', upsertError);
+                                throw upsertError;
+                            }
+                        }
+
+                        tempBatch = []; // Clear for next batch
+                        saveQueueState({ ...state, processedCount: i + 1 });
                     }
                 }
             }
 
             // 3. Final Completion
-            console.log('✨ [Smart Import] SUCCESS: All chapters processed.');
+            console.log('✨ [Smart Import] SUCCESS: All items processed.');
             clearQueue();
             setImporting(false);
 
@@ -171,7 +174,7 @@ export const useSmartImport = () => {
 
         } catch (err: any) {
             console.error('❌ [Import Crash] FATAL ERROR:', err);
-            setError(err.message || 'Import failed. You can resume from the last saved chapter.');
+            setError(err.message || 'Import failed. You can resume from the last saved state.');
             setImporting(false);
         }
     }, [user]);

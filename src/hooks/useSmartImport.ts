@@ -146,9 +146,8 @@ export const useSmartImport = () => {
                     const { error: upsertError } = await supabase
                         .from('flashcards')
                         .upsert(currentBatchEntries, {
-                            onConflict: 'user_id, front, batch_id',
+                            onConflict: 'front, category',
                             ignoreDuplicates: true
-                            // ignoreDuplicates: true is key to skipping 23505
                         });
 
                     if (upsertError) {

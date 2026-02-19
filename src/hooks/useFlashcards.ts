@@ -268,9 +268,10 @@ export const useFlashcards = (): UseFlashcardsReturn => {
                 return { success: true };
             }
 
+            // O'ZGARISH 1: batch_id qoshildi
             const { data: existingCards, error: fetchError } = await supabase
                 .from('flashcards')
-                .select('front, category, user_id')
+                .select('front, category, batch_id, user_id') 
                 .eq('user_id', user.id)
                 .range(0, 5000);
 
@@ -279,14 +280,16 @@ export const useFlashcards = (): UseFlashcardsReturn => {
                 throw new Error(`Failed to fetch existing cards: ${fetchError.message}`);
             }
 
+            // O'ZGARISH 2: batch_id qo'shildi
             const existingPairs = new Set(
                 (existingCards || []).map((card) =>
-                    `${normalizeWord(card.front)}::${card.category}`
+                    `${normalizeWord(card.front)}::${card.category}::${card.batch_id}`
                 )
             );
 
+            // O'ZGARISH 3: batchId qo'shildi
             const newCards = localCards.filter((card) => {
-                const normalizedPair = `${normalizeWord(card.word)}::${card.language}`;
+                const normalizedPair = `${normalizeWord(card.word)}::${card.language}::${card.batchId || getTodayBatchId()}`;
                 return !existingPairs.has(normalizedPair);
             });
 
@@ -340,10 +343,12 @@ export const useFlashcards = (): UseFlashcardsReturn => {
             for (const newCard of cards) {
                 const normalizedNewWord = normalizeWord(newCard.word);
 
+                // O'ZGARISH 4: batchId ham tekshiriladi
                 const isDuplicate = flashcards.some((existingCard) => {
                     const normalizedExisting = normalizeWord(existingCard.word);
                     return normalizedExisting === normalizedNewWord &&
-                        existingCard.language === newCard.language;
+                        existingCard.language === newCard.language &&
+                        existingCard.batchId === newCard.batchId;
                 });
 
                 if (isDuplicate) {
@@ -497,3 +502,4 @@ export const useFlashcards = (): UseFlashcardsReturn => {
         refetch: loadFromSupabase,
     };
 };
+            

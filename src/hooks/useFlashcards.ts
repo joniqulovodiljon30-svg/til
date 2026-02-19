@@ -27,12 +27,10 @@ const normalizeWord = (word: string): string => {
     return word.trim().toLowerCase();
 };
 
-// Get today's date in YYYY-MM-DD format for batch_id
 const getTodayBatchId = (): string => {
-    return new Date().toISOString().split('T')[0]; // "2026-02-12"
+    return new Date().toISOString().split('T')[0];
 };
 
-// STRICT DEMO DATA - One card per language
 const DEMO_CARDS = {
     en: {
         word: 'Serendipity',
@@ -83,7 +81,6 @@ export const useFlashcards = (): UseFlashcardsReturn => {
             const saved = localStorage.getItem(STORAGE_KEY);
             return saved ? JSON.parse(saved) : [];
         } catch (e) {
-            console.error('[useFlashcards] Failed to load from localStorage:', e);
             return [];
         }
     }, []);
@@ -91,41 +88,30 @@ export const useFlashcards = (): UseFlashcardsReturn => {
     const saveToLocalStorage = useCallback((cards: Flashcard[]) => {
         try {
             localStorage.setItem(STORAGE_KEY, JSON.stringify(cards));
-        } catch (e) {
-            console.error('[useFlashcards] Failed to save to localStorage:', e);
-        }
+        } catch (e) {}
     }, []);
 
     const loadFromSupabase = useCallback(async () => {
-        if (!user) {
-            console.log('[useFlashcards] No user, skipping Supabase load');
-            return;
-        }
+        if (!user) return;
 
         try {
-            console.log('[useFlashcards] Loading flashcards for user:', user.id);
             setLoading(true);
             setError(null);
 
+            // UNLIMITED: Limit va range olib tashlandi
             const { data, error: fetchError } = await (supabase
                 .from('flashcards')
                 .select('id, front, back, ipa, transcription, definition, example, category, batch_id, created_at, is_mistake, audio, user_id')
                 .eq('user_id', user.id)
-                .order('created_at', { ascending: false })
-                .limit(200000) as any); // Set strict 200,000 limit
+                .order('created_at', { ascending: false }) as any);
 
-            if (fetchError) {
-                console.error('[useFlashcards] Fetch error:', fetchError.message);
-                throw fetchError;
-            }
-
-            console.log('[useFlashcards] Loaded', data?.length || 0, 'flashcards');
+            if (fetchError) throw fetchError;
 
             const cards: Flashcard[] = (data || []).map((row) => ({
                 id: row.id,
                 word: row.front,
                 ipa: row.ipa || '',
-                transcription: (row as any).transcription || row.ipa || '', // Map transcription, fallback to ipa
+                transcription: (row as any).transcription || row.ipa || '',
                 audio: row.audio || undefined,
                 translation: row.back,
                 definition: (row as any).definition || '',
@@ -138,7 +124,6 @@ export const useFlashcards = (): UseFlashcardsReturn => {
 
             setFlashcards(cards);
         } catch (e) {
-            console.error('[useFlashcards] Error loading from Supabase:', e);
             setError('Failed to load flashcards');
         } finally {
             setLoading(false);
@@ -147,75 +132,47 @@ export const useFlashcards = (): UseFlashcardsReturn => {
 
     useEffect(() => {
         if (user) {
-            console.log('[useFlashcards] User authenticated, loading from Supabase');
             loadFromSupabase();
-
-            // REAL-TIME SUBSCRIPTION
-            console.log('[useFlashcards] Setting up Real-time subscription for', user.id);
             const channel = supabase
                 .channel(`public:flashcards:user:${user.id}`)
                 .on(
                     'postgres_changes',
-                    {
-                        event: '*',
-                        schema: 'public',
-                        table: 'flashcards',
-                        filter: `user_id=eq.${user.id}`,
-                    },
-                    (payload) => {
-                        console.log('[useFlashcards] Real-time change detected:', payload.eventType);
-                        loadFromSupabase(); // Refetch on any change for simplicity/data integrity
-                    }
+                    { event: '*', schema: 'public', table: 'flashcards', filter: `user_id=eq.${user.id}` },
+                    () => loadFromSupabase()
                 )
                 .subscribe();
 
             return () => {
-                console.log('[useFlashcards] Cleaning up Real-time subscription');
                 supabase.removeChannel(channel);
             };
         } else {
-            console.log('[useFlashcards] Guest mode, loading from localStorage');
-            const localCards = loadFromLocalStorage();
-            setFlashcards(localCards);
+            setFlashcards(loadFromLocalStorage());
             setLoading(false);
         }
     }, [user, loadFromSupabase, loadFromLocalStorage]);
 
     const addDemoCards = useCallback(
         async (language: SupportedLanguage) => {
-            console.log('[useFlashcards] Adding demo card for language:', language);
-
-            // STRICT LANGUAGE ISOLATION - Use switch statement
             let demoData;
             switch (language) {
-                case 'en':
-                    demoData = DEMO_CARDS.en;
-                    break;
-                case 'es':
-                    demoData = DEMO_CARDS.es;
-                    break;
-                case 'zh':
-                    demoData = DEMO_CARDS.zh;
-                    break;
-                default:
-                    console.warn('[useFlashcards] Invalid language:', language);
-                    return;
+                case 'en': demoData = DEMO_CARDS.en; break;
+                case 'es': demoData = DEMO_CARDS.es; break;
+                case 'zh': demoData = DEMO_CARDS.zh; break;
+                default: return;
             }
 
-            // Check if demo already exists for this language
             const normalizedWord = normalizeWord(demoData.word);
-            const demoExists = flashcards.some((card) => {
-                const normalizedExisting = normalizeWord(card.word);
-                return normalizedExisting === normalizedWord && card.language === language;
-            });
-
-            if (demoExists) {
-                alert(`Demo flashcard already added for ${language.toUpperCase()}`);
-                return;
-            }
-
             const todayBatch = getTodayBatchId();
             const demoBatchId = `DEMO-${language.toUpperCase()}-${todayBatch}`;
+
+            // Check if demo already exists in this SPECIFIC batch
+            const demoExists = flashcards.some((card) => 
+                normalizeWord(card.word) === normalizedWord && 
+                card.language === language && 
+                card.batchId === demoBatchId
+            );
+
+            if (demoExists) return;
 
             const demoCard: Flashcard = {
                 id: Math.random().toString(36).substring(2, 11),
@@ -232,68 +189,41 @@ export const useFlashcards = (): UseFlashcardsReturn => {
             };
 
             await addFlashcards([demoCard]);
-
-            console.log('[useFlashcards] Successfully added demo card for', language);
         },
         [flashcards]
     );
 
-    const syncLocalToSupabase = useCallback(async (): Promise<{
-        success: boolean;
-        error?: string;
-    }> => {
-        if (!user) {
-            const errorMsg = 'User not authenticated. Please log in first.';
-            console.error('[useFlashcards] Sync failed:', errorMsg);
-            return { success: false, error: errorMsg };
-        }
+    const syncLocalToSupabase = useCallback(async (): Promise<{ success: boolean; error?: string }> => {
+        if (!user) return { success: false, error: 'User not authenticated' };
 
-        console.log('[useFlashcards] Starting sync for user:', user.id);
-
-        if (syncTriggeredRef.current === user.id) {
-            console.log('[useFlashcards] Sync already completed for this session');
-            return { success: true };
-        }
+        if (syncTriggeredRef.current === user.id) return { success: true };
 
         try {
             setSyncing(true);
-            setSyncError(null);
-
             const localCards = loadFromLocalStorage();
-            console.log('[useFlashcards] Found', localCards.length, 'local cards');
-
             if (localCards.length === 0) {
-                console.log('[useFlashcards] No local cards to sync');
                 setSyncing(false);
                 return { success: true };
             }
 
-            // O'ZGARISH 1: batch_id qoshildi
+            // UNLIMITED: Sinxronizatsiya uchun ham hamma so'zlarni olamiz
             const { data: existingCards, error: fetchError } = await supabase
                 .from('flashcards')
-                .select('front, category, batch_id, user_id') 
-                .eq('user_id', user.id)
-                .range(0, 5000);
+                .select('front, category, batch_id')
+                .eq('user_id', user.id);
 
-            if (fetchError) {
-                console.error('[useFlashcards] Fetch error:', fetchError.message);
-                throw new Error(`Failed to fetch existing cards: ${fetchError.message}`);
-            }
+            if (fetchError) throw fetchError;
 
-            // O'ZGARISH 2: batch_id qo'shildi
             const existingPairs = new Set(
                 (existingCards || []).map((card) =>
                     `${normalizeWord(card.front)}::${card.category}::${card.batch_id}`
                 )
             );
 
-            // O'ZGARISH 3: batchId qo'shildi
             const newCards = localCards.filter((card) => {
                 const normalizedPair = `${normalizeWord(card.word)}::${card.language}::${card.batchId || getTodayBatchId()}`;
                 return !existingPairs.has(normalizedPair);
             });
-
-            console.log('[useFlashcards]', newCards.length, 'new cards to upload');
 
             if (newCards.length > 0) {
                 const dbCards = newCards.map((card) => ({
@@ -308,60 +238,40 @@ export const useFlashcards = (): UseFlashcardsReturn => {
                     batch_id: card.batchId || getTodayBatchId(),
                 }));
 
-                const { error: insertError } = await supabase
-                    .from('flashcards')
-                    .insert(dbCards);
-
-                if (insertError) {
-                    console.error('[useFlashcards] Insert error:', insertError.message);
-                    throw new Error(`Failed to insert cards: ${insertError.message}`);
-                }
-
-                console.log('[useFlashcards] Successfully inserted', dbCards.length, 'cards');
+                const { error: insertError } = await supabase.from('flashcards').insert(dbCards);
+                if (insertError) throw insertError;
             }
 
             localStorage.removeItem(STORAGE_KEY);
             await loadFromSupabase();
-
             syncTriggeredRef.current = user.id;
             setSyncing(false);
-
-            console.log('[useFlashcards] Sync completed successfully!');
             return { success: true };
         } catch (e) {
-            console.error('[useFlashcards] Sync error:', e);
-            const errorMsg = e instanceof Error ? e.message : 'Failed to sync data';
-            setSyncError(errorMsg);
             setSyncing(false);
-            return { success: false, error: errorMsg };
+            return { success: false, error: 'Sync failed' };
         }
     }, [user, loadFromLocalStorage, loadFromSupabase]);
 
     const addFlashcards = useCallback(
         async (cards: Flashcard[]) => {
-            // Duplicate check
             for (const newCard of cards) {
                 const normalizedNewWord = normalizeWord(newCard.word);
-
-                // O'ZGARISH 4: batchId ham tekshiriladi
-                const isDuplicate = flashcards.some((existingCard) => {
-                    const normalizedExisting = normalizeWord(existingCard.word);
-                    return normalizedExisting === normalizedNewWord &&
-                        existingCard.language === newCard.language &&
-                        existingCard.batchId === newCard.batchId;
-                });
+                // BAZA QULFIGA MOSLASH: Til + Ro'yxat birga tekshiriladi
+                const isDuplicate = flashcards.some((existingCard) => 
+                    normalizeWord(existingCard.word) === normalizedNewWord &&
+                    existingCard.language === newCard.language &&
+                    existingCard.batchId === newCard.batchId
+                );
 
                 if (isDuplicate) {
-                    alert(`This word is already in the ${newCard.language.toUpperCase()} collection!\n\nWord: "${newCard.word}"`);
+                    alert(`"${newCard.word}" so'zi ushbu ro'yxatda bor!`);
                     return;
                 }
             }
 
             if (user) {
                 try {
-                    console.log('[useFlashcards] Adding', cards.length, 'cards to Supabase');
-
-                    // SCHEMA MATCH: Ensure object matches ALL database columns
                     const dbCards = cards.map((card) => ({
                         user_id: user.id,
                         front: card.word.trim(),
@@ -372,33 +282,22 @@ export const useFlashcards = (): UseFlashcardsReturn => {
                         definition: card.definition || '',
                         example: card.example || '',
                         batch_id: card.batchId || getTodayBatchId(),
-                        language: card.language,
                     }));
 
-                    const { error: insertError } = await supabase
-                        .from('flashcards')
-                        .insert(dbCards);
-
+                    const { error: insertError } = await supabase.from('flashcards').insert(dbCards);
                     if (insertError) {
-                        console.error('[useFlashcards] Add cards error:', insertError.message);
-
-                        if (insertError.message.includes('duplicate key')) {
-                            alert('This word already exists in this collection!');
+                        if (insertError.message.includes('duplicate')) {
+                            alert('Bu so\'z bazada allaqachon mavjud!');
                         } else {
                             throw insertError;
                         }
                         return;
                     }
-
-                    console.log('[useFlashcards] Cards added successfully');
-
                     await loadFromSupabase();
                 } catch (e) {
-                    console.error('[useFlashcards] Error adding flashcards:', e);
                     setError('Failed to add flashcards');
                 }
             } else {
-                console.log('[useFlashcards] Adding', cards.length, 'cards to localStorage');
                 setFlashcards((prev) => {
                     const updated = [...cards, ...prev];
                     saveToLocalStorage(updated);
@@ -413,18 +312,10 @@ export const useFlashcards = (): UseFlashcardsReturn => {
         async (id: string) => {
             if (user) {
                 try {
-                    const { error: deleteError } = await supabase
-                        .from('flashcards')
-                        .delete()
-                        .eq('id', id)
-                        .eq('user_id', user.id);
-
+                    const { error: deleteError } = await supabase.from('flashcards').delete().eq('id', id).eq('user_id', user.id);
                     if (deleteError) throw deleteError;
-
                     setFlashcards((prev) => prev.filter((c) => c.id !== id));
                 } catch (e) {
-                    console.error('[useFlashcards] Error deleting flashcard:', e);
-                    setError('Failed to delete flashcard');
                     await loadFromSupabase();
                 }
             } else {
@@ -442,18 +333,10 @@ export const useFlashcards = (): UseFlashcardsReturn => {
         async (batchId: string) => {
             if (user) {
                 try {
-                    const { error: deleteError } = await supabase
-                        .from('flashcards')
-                        .delete()
-                        .eq('batch_id', batchId)
-                        .eq('user_id', user.id);
-
+                    const { error: deleteError } = await supabase.from('flashcards').delete().eq('batch_id', batchId).eq('user_id', user.id);
                     if (deleteError) throw deleteError;
-
                     setFlashcards((prev) => prev.filter((c) => c.batchId !== batchId));
                 } catch (e) {
-                    console.error('[useFlashcards] Error deleting batch:', e);
-                    setError('Failed to delete batch');
                     await loadFromSupabase();
                 }
             } else {
@@ -469,37 +352,20 @@ export const useFlashcards = (): UseFlashcardsReturn => {
 
     const toggleMistake = useCallback(
         async (id: string) => {
-            if (user) {
-                setFlashcards((prev) =>
-                    prev.map((c) => (c.id === id ? { ...c, isMistake: !c.isMistake } : c))
-                );
-            } else {
-                setFlashcards((prev) => {
-                    const updated = prev.map((c) =>
-                        c.id === id ? { ...c, isMistake: !c.isMistake } : c
-                    );
-                    saveToLocalStorage(updated);
-                    return updated;
-                });
-            }
+            setFlashcards((prev) => {
+                const updated = prev.map((c) => c.id === id ? { ...c, isMistake: !c.isMistake } : c);
+                if (!user) saveToLocalStorage(updated);
+                return updated;
+            });
         },
-        [user, flashcards, loadFromSupabase, saveToLocalStorage]
+        [user, saveToLocalStorage]
     );
 
     return {
-        flashcards,
-        loading,
-        error,
-        syncing,
-        syncError,
-        addFlashcards,
-        addDemoCards,
-        deleteFlashcard,
-        deleteBatch,
-        toggleMistake,
-        syncLocalToSupabase,
-        hasLocalData,
+        flashcards, loading, error, syncing, syncError,
+        addFlashcards, addDemoCards, deleteFlashcard, deleteBatch,
+        toggleMistake, syncLocalToSupabase, hasLocalData,
         refetch: loadFromSupabase,
     };
 };
-            
+        

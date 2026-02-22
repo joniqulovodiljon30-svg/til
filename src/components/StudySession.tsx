@@ -16,6 +16,7 @@ type CardSide = 'FRONT' | 'BACK';
 type TestState = 'INPUT' | 'EVALUATING' | 'RESULT';
 
 const StudySession: React.FC<StudySessionProps> = ({ cards, onExit, language, onToggleMistake, onDeleteCard }) => {
+  const isDark = document.body.classList.contains('dark');
   const [mode, setMode] = useState<Mode>('MENU');
 
   // Study State
@@ -81,6 +82,51 @@ const StudySession: React.FC<StudySessionProps> = ({ cards, onExit, language, on
       window.speechSynthesis.cancel();
     }
   }, [currentCard?.id, mode]); // Use ID instead of index to avoid flicker on list change
+
+  // --- PC KEYBOARD SHORTCUTS ---
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Input/textarea da yozayotganda ishlamasin
+      const target = e.target as HTMLElement;
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT') {
+        return;
+      }
+
+      // Study va Test rejimlarida ishlaydi
+      if (mode === 'MENU') return;
+
+      switch (e.key) {
+        case 'ArrowRight':
+        case '.': // > tugmasi (Shift + .)
+        case '>':
+          e.preventDefault();
+          handleNext();
+          break;
+        case 'ArrowLeft':
+        case ',': // < tugmasi (Shift + ,)
+        case '<':
+          e.preventDefault();
+          handlePrev();
+          break;
+        case 'ArrowDown':
+        case 'ArrowUp':
+          if (mode === 'STUDY') {
+            e.preventDefault();
+            toggleFlip();
+          }
+          break;
+        case '0':
+          if (mode === 'STUDY') {
+            e.preventDefault();
+            playAudio({ stopPropagation: () => { } } as React.MouseEvent);
+          }
+          break;
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [mode, currentIndex, cards.length]);
 
   const handleNext = () => {
     if (currentIndex < cards.length - 1) {
@@ -167,9 +213,9 @@ const StudySession: React.FC<StudySessionProps> = ({ cards, onExit, language, on
 
   if (mode === 'MENU') {
     return (
-      <div className="fixed inset-0 z-50 bg-slate-900 text-white flex flex-col items-center justify-center p-6">
+      <div className={`fixed inset-0 z-50 text-white flex flex-col items-center justify-center p-6 ${isDark ? 'bg-slate-950' : 'bg-slate-900'}`}>
         <h2 className="text-3xl font-black tracking-tighter mb-2">CHOOSE MODE</h2>
-        <div className="text-xs font-bold uppercase tracking-widest bg-slate-800 px-3 py-1 rounded mb-8 text-indigo-400">
+        <div className={`text-xs font-bold uppercase tracking-widest px-3 py-1 rounded mb-8 text-indigo-400 ${isDark ? 'bg-slate-900' : 'bg-slate-800'}`}>
           Language: {language === 'en' ? 'English' : language === 'es' ? 'Spanish' : 'Chinese'}
         </div>
 
@@ -227,22 +273,22 @@ const StudySession: React.FC<StudySessionProps> = ({ cards, onExit, language, on
 
 
   return (
-    <div className="fixed inset-0 z-50 bg-gray-50 flex flex-col h-screen w-screen font-sans text-slate-900">
+    <div className={`fixed inset-0 z-50 flex flex-col h-screen w-screen font-sans transition-colors duration-300 ${isDark ? 'bg-slate-950 text-slate-100' : 'bg-gray-50 text-slate-900'}`}>
       {/* HEADER */}
-      <div className="bg-white border-b border-gray-200 px-6 py-4 flex justify-between items-center shadow-sm shrink-0 z-10">
+      <div className={`px-6 py-4 flex justify-between items-center shadow-sm shrink-0 z-10 border-b transition-colors duration-300 ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-gray-200'}`}>
         <div className="flex items-center gap-4">
-          <button onClick={onExit} className="text-slate-400 hover:text-slate-900">
+          <button onClick={onExit} className={`${isDark ? 'text-slate-500 hover:text-white' : 'text-slate-400 hover:text-slate-900'}`}>
             <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
           </button>
           <div>
-            <h2 className="text-sm font-black uppercase tracking-widest text-slate-900">
+            <h2 className={`text-sm font-black uppercase tracking-widest ${isDark ? 'text-slate-100' : 'text-slate-900'}`}>
               {mode === 'STUDY' ? 'Study' : mode === 'TEST_TRANSLATION' ? 'Translation' : 'Sentences'}
             </h2>
             <div className="flex items-center gap-2 mt-1">
-              <span className="text-[10px] font-bold text-slate-400">Card</span>
+              <span className={`text-[10px] font-bold ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>Card</span>
               <input
                 type="number"
-                className="w-12 h-6 text-center text-[10px] font-bold text-slate-600 bg-gray-100 rounded border border-gray-200 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-all"
+                className={`w-12 h-6 text-center text-[10px] font-bold rounded border focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-all ${isDark ? 'text-slate-300 bg-slate-800 border-slate-700' : 'text-slate-600 bg-gray-100 border-gray-200'}`}
                 value={jumpInput}
                 onChange={(e) => setJumpInput(e.target.value)}
                 onKeyDown={handleJump}
@@ -250,11 +296,11 @@ const StudySession: React.FC<StudySessionProps> = ({ cards, onExit, language, on
                 min={1}
                 max={cards.length}
               />
-              <span className="text-[10px] font-bold text-slate-400">/ {cards.length} ({language.toUpperCase()})</span>
+              <span className={`text-[10px] font-bold ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>/ {cards.length} ({language.toUpperCase()})</span>
             </div>
           </div>
         </div>
-        <div className="w-24 bg-gray-100 h-1 rounded-full overflow-hidden">
+        <div className={`w-24 h-1 rounded-full overflow-hidden ${isDark ? 'bg-slate-800' : 'bg-gray-100'}`}>
           <div
             className="bg-indigo-600 h-full transition-all duration-300"
             style={{ width: `${((currentIndex + 1) / cards.length) * 100}%` }}
@@ -379,19 +425,19 @@ const StudySession: React.FC<StudySessionProps> = ({ cards, onExit, language, on
 
           {/* TEST MODES (No Flip) */}
           {(mode === 'TEST_TRANSLATION' || mode === 'TEST_SENTENCE') && (
-            <div className="bg-white rounded-2xl shadow-xl border border-gray-200 h-full flex flex-col p-8 md:p-10 relative overflow-y-auto">
+            <div className={`rounded-2xl shadow-xl border h-full flex flex-col p-8 md:p-10 relative overflow-y-auto ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
               {/* Same test UI as before, just kept clean */}
               <div className="text-center mb-6">
-                <span className="inline-block px-3 py-1 bg-slate-100 text-slate-500 rounded text-[10px] font-black uppercase tracking-widest mb-4">
+                <span className={`inline-block px-3 py-1 rounded text-[10px] font-black uppercase tracking-widest mb-4 ${isDark ? 'bg-slate-700 text-slate-400' : 'bg-slate-100 text-slate-500'}`}>
                   {mode === 'TEST_TRANSLATION' ? 'Translate to Uzbek' : 'Write a sentence'}
                 </span>
-                <h1 className="text-3xl font-black text-slate-900 mb-2">{currentCard.word}</h1>
+                <h1 className={`text-3xl font-black mb-2 ${isDark ? 'text-white' : 'text-slate-900'}`}>{currentCard.word}</h1>
               </div>
 
               {testState !== 'RESULT' ? (
                 <div className="flex-1 flex flex-col">
                   <textarea
-                    className="w-full p-4 border-2 border-slate-200 rounded-xl focus:border-indigo-600 focus:ring-0 outline-none transition-all resize-none mb-4 flex-1 text-lg"
+                    className={`w-full p-4 border-2 rounded-xl focus:border-indigo-600 focus:ring-0 outline-none transition-all resize-none mb-4 flex-1 text-lg ${isDark ? 'bg-slate-700 border-slate-600 text-white placeholder:text-slate-500' : 'border-slate-200 text-slate-900'}`}
                     placeholder={mode === 'TEST_TRANSLATION' ? "Type translation..." : "Write a sentence..."}
                     value={userAnswer}
                     onChange={(e) => setUserAnswer(e.target.value)}
@@ -400,22 +446,22 @@ const StudySession: React.FC<StudySessionProps> = ({ cards, onExit, language, on
                   <button
                     onClick={submitAnswer}
                     disabled={!userAnswer.trim() || testState === 'EVALUATING'}
-                    className={`w-full py-4 rounded-xl font-black text-xs uppercase tracking-widest ${testState === 'EVALUATING' ? 'bg-slate-100 text-slate-400' : 'bg-indigo-600 text-white hover:bg-indigo-500'}`}
+                    className={`w-full py-4 rounded-xl font-black text-xs uppercase tracking-widest ${testState === 'EVALUATING' ? (isDark ? 'bg-slate-700 text-slate-500' : 'bg-slate-100 text-slate-400') : 'bg-indigo-600 text-white hover:bg-indigo-500'}`}
                   >
                     {testState === 'EVALUATING' ? 'Behavor...' : 'Check Answer'}
                   </button>
                 </div>
               ) : (
                 <div className="flex-1 flex flex-col animate-in fade-in">
-                  <div className={`p-4 rounded-xl border mb-4 flex-1 ${evaluation?.correct ? 'bg-emerald-50 border-emerald-200' : 'bg-rose-50 border-rose-200'}`}>
-                    <h3 className={`font-black mb-2 ${evaluation?.correct ? 'text-emerald-700' : 'text-rose-700'}`}>{evaluation?.correct ? 'Correct!' : 'Incorrect'}</h3>
-                    <p className="text-sm text-slate-700">{evaluation?.feedback}</p>
+                  <div className={`p-4 rounded-xl border mb-4 flex-1 ${evaluation?.correct ? (isDark ? 'bg-emerald-900/30 border-emerald-700' : 'bg-emerald-50 border-emerald-200') : (isDark ? 'bg-rose-900/30 border-rose-700' : 'bg-rose-50 border-rose-200')}`}>
+                    <h3 className={`font-black mb-2 ${evaluation?.correct ? 'text-emerald-500' : 'text-rose-500'}`}>{evaluation?.correct ? 'Correct!' : 'Incorrect'}</h3>
+                    <p className={`text-sm ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>{evaluation?.feedback}</p>
                   </div>
-                  <div className="bg-slate-50 p-3 rounded mb-4">
-                    <p className="text-xs font-bold text-slate-400 uppercase">Answer</p>
-                    <p className="font-medium text-slate-800">{currentCard.translation}</p>
+                  <div className={`p-3 rounded mb-4 ${isDark ? 'bg-slate-700' : 'bg-slate-50'}`}>
+                    <p className={`text-xs font-bold uppercase ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>Answer</p>
+                    <p className={`font-medium ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>{currentCard.translation}</p>
                   </div>
-                  <button onClick={handleNext} className="w-full py-4 bg-slate-900 text-white rounded-xl font-black text-xs uppercase tracking-widest">Next</button>
+                  <button onClick={handleNext} className={`w-full py-4 rounded-xl font-black text-xs uppercase tracking-widest ${isDark ? 'bg-indigo-600 text-white hover:bg-indigo-500' : 'bg-slate-900 text-white'}`}>Next</button>
                 </div>
               )}
             </div>
@@ -427,7 +473,7 @@ const StudySession: React.FC<StudySessionProps> = ({ cards, onExit, language, on
       {/* FOOTER CONTROLS */}
       {
         mode === 'STUDY' && (
-          <div className="bg-white border-t border-gray-200 p-4 md:p-6 shrink-0 z-20">
+          <div className={`border-t p-4 md:p-6 shrink-0 z-20 transition-colors duration-300 ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-gray-200'}`}>
             <div className="max-w-xl mx-auto flex items-center gap-4">
               {/* MISTAKE TOGGLE BUTTON */}
               <button
@@ -437,7 +483,7 @@ const StudySession: React.FC<StudySessionProps> = ({ cards, onExit, language, on
                 }}
                 className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-all shadow-lg active:scale-95 ${currentCard.isMistake
                   ? 'bg-emerald-100 text-emerald-600 hover:bg-emerald-200 border-2 border-emerald-300'
-                  : 'bg-rose-50 text-rose-400 hover:bg-rose-100 border-2 border-transparent hover:border-rose-200'
+                  : (isDark ? 'bg-rose-900/30 text-rose-400 hover:bg-rose-900/50 border-2 border-transparent hover:border-rose-700' : 'bg-rose-50 text-rose-400 hover:bg-rose-100 border-2 border-transparent hover:border-rose-200')
                   }`}
                 title={currentCard.isMistake ? "Mark as Mastered (Remove from Mistakes)" : "Mark as Mistake"}
               >
@@ -454,8 +500,8 @@ const StudySession: React.FC<StudySessionProps> = ({ cards, onExit, language, on
                   onClick={handlePrev}
                   disabled={currentIndex === 0}
                   className={`flex-1 py-4 rounded-xl font-black text-xs uppercase tracking-widest transition-all ${currentIndex === 0
-                    ? 'bg-gray-50 text-gray-300 cursor-not-allowed'
-                    : 'bg-white border-2 border-gray-100 text-slate-900 hover:border-slate-300'
+                    ? (isDark ? 'bg-slate-800 text-slate-600 cursor-not-allowed' : 'bg-gray-50 text-gray-300 cursor-not-allowed')
+                    : (isDark ? 'bg-slate-800 border-2 border-slate-700 text-white hover:border-slate-500' : 'bg-white border-2 border-gray-100 text-slate-900 hover:border-slate-300')
                     }`}
                 >
                   Prev
@@ -464,8 +510,8 @@ const StudySession: React.FC<StudySessionProps> = ({ cards, onExit, language, on
                   onClick={handleNext}
                   disabled={currentIndex === cards.length - 1}
                   className={`flex-1 py-4 rounded-xl font-black text-xs uppercase tracking-widest transition-all ${currentIndex === cards.length - 1
-                    ? 'bg-gray-50 text-gray-300 cursor-not-allowed'
-                    : 'bg-slate-900 text-white hover:bg-slate-800 shadow-xl shadow-slate-200'
+                    ? (isDark ? 'bg-slate-800 text-slate-600 cursor-not-allowed' : 'bg-gray-50 text-gray-300 cursor-not-allowed')
+                    : (isDark ? 'bg-indigo-600 text-white hover:bg-indigo-500 shadow-xl shadow-indigo-900/30' : 'bg-slate-900 text-white hover:bg-slate-800 shadow-xl shadow-slate-200')
                     }`}
                 >
                   Next

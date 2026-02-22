@@ -143,19 +143,16 @@ export const useSmartImport = () => {
                 if (currentBatchEntries.length > 0) {
                     console.log(`💾 Upserting batch ${batchIdx + 1}/${totalBatches}...`);
 
-                    const { error: upsertError } = await supabase
+                    const { error: insertError } = await supabase
                         .from('flashcards')
-                        .upsert(currentBatchEntries, {
-                            onConflict: 'front, category',
-                            ignoreDuplicates: true
-                        });
+                        .insert(currentBatchEntries);
 
-                    if (upsertError) {
-                        if (upsertError.code === '23505') {
-                            console.warn('⚠️ [Duplicate Warning] Skipping duplicates in batch...');
+                    if (insertError) {
+                        if (insertError.code === '23505') {
+                            console.warn('⚠️ [Duplicate Warning] Ba\'zi dublikatlar o\'tkazib yuborildi...');
                         } else {
-                            console.error('❌ [Database Error] Failed to upsert batch:', upsertError);
-                            throw upsertError;
+                            console.error('❌ [Database Error] Failed to insert batch:', insertError);
+                            throw insertError;
                         }
                     }
 

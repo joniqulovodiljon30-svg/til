@@ -4,12 +4,53 @@
   box-sizing: border-box;
 }
 
+:root {
+  --bg-primary: #f8fafc;
+  --bg-card: #ffffff;
+  --bg-input: #ffffff;
+  --bg-header: #0f172a;
+  --text-primary: #0f172a;
+  --text-secondary: #64748b;
+  --text-muted: #94a3b8;
+  --border-color: #e2e8f0;
+  --border-card: #e2e8f0;
+  --shadow-card: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
+  --bg-input-field: #ffffff;
+  --bg-section: #ffffff;
+  --bg-hover: #f1f5f9;
+  --bg-modal-overlay: rgba(0, 0, 0, 0.5);
+  --bg-modal: #ffffff;
+  --bg-badge: #f1f5f9;
+}
+
+body.dark {
+  --bg-primary: #0f172a;
+  --bg-card: #1e293b;
+  --bg-input: #1e293b;
+  --bg-header: #020617;
+  --text-primary: #f1f5f9;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+  --border-color: #334155;
+  --border-card: #334155;
+  --shadow-card: 0 10px 15px -3px rgba(0, 0, 0, 0.4), 0 4px 6px -4px rgba(0, 0, 0, 0.3);
+  --bg-input-field: #334155;
+  --bg-section: #1e293b;
+  --bg-hover: #334155;
+  --bg-modal-overlay: rgba(0, 0, 0, 0.7);
+  --bg-modal: #1e293b;
+  --bg-badge: #334155;
+}
+
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
     'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
     sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  transition: background-color 0.3s ease, color 0.3s ease;
 }
 
 /* Tailwind-style animations */

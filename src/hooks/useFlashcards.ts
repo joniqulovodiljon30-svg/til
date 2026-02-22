@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 
 const STORAGE_KEY = 'vocab_pro_flashcards_v1';
+const SUPABASE_CACHE_KEY = 'vocab_pro_supabase_cache_v1';
 
 // ⚠️ After changing Supabase schema, do a HARD REFRESH (Ctrl + F5)
 
@@ -29,6 +30,22 @@ const normalizeWord = (word: string): string => {
 
 const getTodayBatchId = (): string => {
     return new Date().toISOString().split('T')[0];
+};
+
+// --- SUPABASE CACHE HELPERS ---
+const loadFromSupabaseCache = (): Flashcard[] => {
+    try {
+        const cached = localStorage.getItem(SUPABASE_CACHE_KEY);
+        return cached ? JSON.parse(cached) : [];
+    } catch {
+        return [];
+    }
+};
+
+const saveToSupabaseCache = (cards: Flashcard[]) => {
+    try {
+        localStorage.setItem(SUPABASE_CACHE_KEY, JSON.stringify(cards));
+    } catch (e) { }
 };
 
 const DEMO_CARDS = {
@@ -64,6 +81,7 @@ export const useFlashcards = (): UseFlashcardsReturn => {
     const [syncError, setSyncError] = useState<string | null>(null);
 
     const syncTriggeredRef = useRef<string | null>(null);
+    const initialLoadDoneRef = useRef(false);
 
     const hasLocalData = useCallback((): boolean => {
         try {
@@ -88,14 +106,17 @@ export const useFlashcards = (): UseFlashcardsReturn => {
     const saveToLocalStorage = useCallback((cards: Flashcard[]) => {
         try {
             localStorage.setItem(STORAGE_KEY, JSON.stringify(cards));
-        } catch (e) {}
+        } catch (e) { }
     }, []);
 
-    const loadFromSupabase = useCallback(async () => {
+    const loadFromSupabase = useCallback(async (silent = false) => {
         if (!user) return;
 
         try {
-            setLoading(true);
+            // Faqat kesh bo'lmaganda loading spinner ko'rsatamiz
+            if (!silent) {
+                setLoading(true);
+            }
             setError(null);
 
             // UNLIMITED: Limit va range olib tashlandi
@@ -123,6 +144,8 @@ export const useFlashcards = (): UseFlashcardsReturn => {
             }));
 
             setFlashcards(cards);
+            // Keshga saqlaymiz — keyingi safar darhol ko'rsatiladi
+            saveToSupabaseCache(cards);
         } catch (e) {
             setError('Failed to load flashcards');
         } finally {
@@ -132,13 +155,25 @@ export const useFlashcards = (): UseFlashcardsReturn => {
 
     useEffect(() => {
         if (user) {
-            loadFromSupabase();
+            // 1. Avval keshdan yuklaymiz (darhol, spinnersiz)
+            const cachedCards = loadFromSupabaseCache();
+            if (cachedCards.length > 0) {
+                setFlashcards(cachedCards);
+                setLoading(false);
+                // Orqa fonda yangilaymiz (spinnersiz)
+                loadFromSupabase(true);
+            } else {
+                // Kesh bo'lmaganda (birinchi marta) — spinner ko'rsatamiz
+                loadFromSupabase(false);
+            }
+            initialLoadDoneRef.current = true;
+
             const channel = supabase
                 .channel(`public:flashcards:user:${user.id}`)
                 .on(
                     'postgres_changes',
                     { event: '*', schema: 'public', table: 'flashcards', filter: `user_id=eq.${user.id}` },
-                    () => loadFromSupabase()
+                    () => loadFromSupabase(true) // Realtime yangilanishlar ham silent
                 )
                 .subscribe();
 
@@ -166,9 +201,9 @@ export const useFlashcards = (): UseFlashcardsReturn => {
             const demoBatchId = `DEMO-${language.toUpperCase()}-${todayBatch}`;
 
             // Check if demo already exists in this SPECIFIC batch
-            const demoExists = flashcards.some((card) => 
-                normalizeWord(card.word) === normalizedWord && 
-                card.language === language && 
+            const demoExists = flashcards.some((card) =>
+                normalizeWord(card.word) === normalizedWord &&
+                card.language === language &&
                 card.batchId === demoBatchId
             );
 
@@ -255,24 +290,30 @@ export const useFlashcards = (): UseFlashcardsReturn => {
 
     const addFlashcards = useCallback(
         async (cards: Flashcard[]) => {
-            for (const newCard of cards) {
+            // Faqat SHU BATCH ichida dublikatlarni filtrlaymiz, boshqa batchlardagi so'zlar to'smaydi
+            const uniqueCards = cards.filter(newCard => {
                 const normalizedNewWord = normalizeWord(newCard.word);
-                // BAZA QULFIGA MOSLASH: Til + Ro'yxat birga tekshiriladi
-                const isDuplicate = flashcards.some((existingCard) => 
+                return !flashcards.some((existingCard) =>
                     normalizeWord(existingCard.word) === normalizedNewWord &&
                     existingCard.language === newCard.language &&
                     existingCard.batchId === newCard.batchId
                 );
+            });
 
-                if (isDuplicate) {
-                    alert(`"${newCard.word}" so'zi ushbu ro'yxatda bor!`);
-                    return;
+            const skippedCount = cards.length - uniqueCards.length;
+            if (uniqueCards.length === 0) {
+                if (skippedCount > 0) {
+                    alert(`Barcha ${cards.length} ta so'z ushbu ro'yxatda allaqachon bor!`);
                 }
+                return;
+            }
+            if (skippedCount > 0) {
+                console.log(`⏭️ ${skippedCount} ta so'z o'tkazib yuborildi (ushbu ro'yxatda allaqachon bor)`);
             }
 
             if (user) {
                 try {
-                    const dbCards = cards.map((card) => ({
+                    const dbCards = uniqueCards.map((card) => ({
                         user_id: user.id,
                         front: card.word.trim(),
                         back: card.translation,
@@ -286,12 +327,11 @@ export const useFlashcards = (): UseFlashcardsReturn => {
 
                     const { error: insertError } = await supabase.from('flashcards').insert(dbCards);
                     if (insertError) {
-                        if (insertError.message.includes('duplicate')) {
-                            alert('Bu so\'z bazada allaqachon mavjud!');
+                        if (insertError.message.includes('duplicate') || insertError.code === '23505') {
+                            console.warn('⚠️ Bazada dublikat topildi, davom etamiz...');
                         } else {
                             throw insertError;
                         }
-                        return;
                     }
                     await loadFromSupabase();
                 } catch (e) {
@@ -299,7 +339,7 @@ export const useFlashcards = (): UseFlashcardsReturn => {
                 }
             } else {
                 setFlashcards((prev) => {
-                    const updated = [...cards, ...prev];
+                    const updated = [...uniqueCards, ...prev];
                     saveToLocalStorage(updated);
                     return updated;
                 });
@@ -352,13 +392,37 @@ export const useFlashcards = (): UseFlashcardsReturn => {
 
     const toggleMistake = useCallback(
         async (id: string) => {
+            const card = flashcards.find(c => c.id === id);
+            if (!card) return;
+
+            const newValue = !card.isMistake;
+
             setFlashcards((prev) => {
-                const updated = prev.map((c) => c.id === id ? { ...c, isMistake: !c.isMistake } : c);
+                const updated = prev.map((c) => c.id === id ? { ...c, isMistake: newValue } : c);
                 if (!user) saveToLocalStorage(updated);
+                // Keshni ham yangilaymiz
+                saveToSupabaseCache(updated);
                 return updated;
             });
+
+            // Supabase ga saqlaymiz (eslab qoladi)
+            if (user) {
+                try {
+                    const { error } = await supabase
+                        .from('flashcards')
+                        .update({ is_mistake: newValue })
+                        .eq('id', id)
+                        .eq('user_id', user.id);
+
+                    if (error) {
+                        console.error('❌ Mistake saqlashda xatolik:', error);
+                    }
+                } catch (e) {
+                    console.error('❌ Mistake saqlashda xatolik:', e);
+                }
+            }
         },
-        [user, saveToLocalStorage]
+        [user, flashcards, saveToLocalStorage]
     );
 
     return {
@@ -368,4 +432,4 @@ export const useFlashcards = (): UseFlashcardsReturn => {
         refetch: loadFromSupabase,
     };
 };
-        
+

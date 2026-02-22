@@ -27,6 +27,7 @@ export const Collections: React.FC<CollectionsProps> = ({
     loading = false,
 }) => {
     const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+    const isDark = document.body.classList.contains('dark');
 
     const languageCards = flashcards.filter(card => card.language === activeLanguage);
 
@@ -73,7 +74,7 @@ export const Collections: React.FC<CollectionsProps> = ({
     return (
         <div className="space-y-6">
             <div className="flex items-center justify-between">
-                <h2 className="text-2xl font-bold text-gray-900">
+                <h2 className={`text-2xl font-bold ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>
                     COLLECTIONS ({activeLanguage.toUpperCase()})
                 </h2>
                 {loading && (
@@ -91,16 +92,16 @@ export const Collections: React.FC<CollectionsProps> = ({
                 {/* IMPORT PDF CARD - Always first */}
                 <div
                     onClick={() => setIsImportModalOpen(true)}
-                    className="bg-white rounded-xl shadow-lg border-2 border-dashed border-indigo-300 hover:border-indigo-500 overflow-hidden cursor-pointer transition-all hover:shadow-xl group"
+                    className={`rounded-xl shadow-lg border-2 border-dashed overflow-hidden cursor-pointer transition-all hover:shadow-xl group ${isDark ? 'bg-slate-800 border-indigo-500/40 hover:border-indigo-400' : 'bg-white border-indigo-300 hover:border-indigo-500'}`}
                 >
                     <div className="p-8 flex flex-col items-center justify-center min-h-[200px]">
-                        <div className="w-16 h-16 rounded-full bg-gradient-to-r from-indigo-100 to-purple-100 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                        <div className={`w-16 h-16 rounded-full flex items-center justify-center mb-4 group-hover:scale-110 transition-transform ${isDark ? 'bg-indigo-900/50' : 'bg-gradient-to-r from-indigo-100 to-purple-100'}`}>
                             <svg className="w-8 h-8 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                             </svg>
                         </div>
-                        <h3 className="text-lg font-bold text-gray-900 mb-2">Import PDF</h3>
-                        <p className="text-sm text-gray-500 text-center">
+                        <h3 className={`text-lg font-bold mb-2 ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>Import PDF</h3>
+                        <p className={`text-sm text-center ${isDark ? 'text-slate-400' : 'text-gray-500'}`}>
                             Upload Cambridge Dictionary
                         </p>
                     </div>
@@ -110,22 +111,22 @@ export const Collections: React.FC<CollectionsProps> = ({
                 {batchGroups.map((batch) => (
                     <div
                         key={batch.batchId}
-                        className="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden hover:shadow-xl transition-all"
+                        className={`rounded-xl shadow-lg border overflow-hidden hover:shadow-xl transition-all ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}
                     >
                         <div className="p-6">
                             <div className="flex items-center justify-between mb-4">
                                 <div className="flex items-center gap-3">
                                     {batch.isDemo && (
-                                        <span className="px-3 py-1 bg-yellow-100 text-yellow-800 text-xs font-bold rounded-full uppercase">
+                                        <span className={`px-3 py-1 text-xs font-bold rounded-full uppercase ${isDark ? 'bg-yellow-900/40 text-yellow-400' : 'bg-yellow-100 text-yellow-800'}`}>
                                             Demo
                                         </span>
                                     )}
                                     {batch.isCustom && (
-                                        <span className="px-3 py-1 bg-purple-100 text-purple-800 text-xs font-bold rounded-full uppercase">
+                                        <span className={`px-3 py-1 text-xs font-bold rounded-full uppercase ${isDark ? 'bg-purple-900/40 text-purple-400' : 'bg-purple-100 text-purple-800'}`}>
                                             Custom
                                         </span>
                                     )}
-                                    <h3 className="text-lg font-bold text-gray-900">
+                                    <h3 className={`text-lg font-bold ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>
                                         {batch.displayName}
                                     </h3>
                                 </div>
@@ -144,7 +145,7 @@ export const Collections: React.FC<CollectionsProps> = ({
                                 </button>
                             </div>
 
-                            <div className="text-sm text-gray-600 mb-4">
+                            <div className={`text-sm mb-4 ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>
                                 {batch.cards.length} {batch.cards.length === 1 ? 'card' : 'cards'}
                             </div>
 
@@ -157,7 +158,7 @@ export const Collections: React.FC<CollectionsProps> = ({
 
                             <button
                                 onClick={() => generatePDF([{ id: batch.batchId, cards: batch.cards }])}
-                                className="px-4 py-2 text-sm font-medium text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors flex items-center justify-center gap-2"
+                                className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-2 ${isDark ? 'text-indigo-400 bg-indigo-900/30 hover:bg-indigo-900/50' : 'text-indigo-600 bg-indigo-50 hover:bg-indigo-100'}`}
                             >
                                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a2 2 0 002 2h12a2 2 0 002-2v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
